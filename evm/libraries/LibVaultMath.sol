@@ -227,14 +227,5 @@ library LibVaultMath {
     
     // For more complex vaults, would add position values for both tokens
   }
-
-  /// @notice Calculate the fees accrued to the protocol
-  /// @param _amount Amount of tokens
-  /// @return Fee amount based on protocol fee
-  function calculateManagerFee(uint256 _amount) internal view returns (uint256) {
-    VaultStorage storage vs = S.vault();
-    
-    // Fee is in basis points (1/10000)
-    return Maths.mulDiv(_amount, vs.feeBps, 10000, Maths.Rounding.UP);
-  }
-}  
+}
+  

@@ -5,6 +5,7 @@ import {IERC20Metadata} from "@openzeppelin/token/ERC20/extensions/IERC20Metadat
 import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
 import {LibAccessControl as AC} from "./LibAccessControl.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "./BTREvents.sol";
+import {ErrorType} from "../BTRTypes.sol";
 
 /// @title LibRescuable
 /// @notice Library for token rescue functionality
@@ -115,130 +116,121 @@ library LibRescuable {
     }
 
     /*═══════════════════════════════════════════════════════════════╗
-    ║                       RESCUE FUNCTIONS                         ║
+    ║                             LOGIC                              ║
     ╚═══════════════════════════════════════════════════════════════*/
+
+    /// @notice Initialize the rescue configuration with default values
+    /// @dev Sets the default timelock and validity periods
+    function initialize() internal {
+        RescuableStorage storage rs = rescuableStorage();
+        rs.rescueTimelock = DEFAULT_RESCUE_TIMELOCK;
+        rs.rescueValidity = DEFAULT_RESCUE_VALIDITY;
+    }
 
     /// @notice Request a rescue for a specific token
     /// @param token Token to be rescued - use address(1) for native tokens (ETH)
     function requestRescue(address token) internal {
-        // Validate token
+        // Check if token is valid
         if (token == address(0)) {
-            revert Errors.RescueInvalidToken();
+            revert Errors.ZeroAddress();
         }
-        
-        // Get the storage for this rescue request
+
+        // Check if token is already being rescued
         RescuableStorage storage rs = rescuableStorage();
-        RescueRequest storage req = rs.rescueRequests[token];
-        
-        // Ensure there's no active unlocked rescue request
-        if (req.timestamp != 0) {
-            uint256 unlockTime = req.timestamp + rs.rescueTimelock;
-            uint256 expiryTime = unlockTime + rs.rescueValidity;
-            
-            if (block.timestamp >= unlockTime && block.timestamp <= expiryTime) {
-                revert Errors.RescueInProgress();
-            }
+        RescueRequest storage request = rs.rescueRequests[token];
+        if (request.timestamp != 0) {
+            revert Errors.AlreadyExists(ErrorType.RESCUE);
         }
-        
-        // Set the new rescue request
-        req.receiver = msg.sender;
-        req.timestamp = uint64(block.timestamp);
-        
-        emit Events.RescueRequested(token, msg.sender, uint64(block.timestamp));
+
+        // Create rescue request
+        request.timestamp = uint64(block.timestamp);
+        request.receiver = msg.sender;
+
+        emit Events.RescueRequested(token, msg.sender, request.timestamp);
     }
 
     /// @notice Execute a rescue for a specific token
     /// @param token Token to be rescued - use address(1) for native tokens (ETH)
     function executeRescue(address token) internal {
-        // Get the storage for this rescue request
-        RescuableStorage storage rs = rescuableStorage();
-        RescueRequest storage req = rs.rescueRequests[token];
-        
-        // Ensure the rescue request exists
-        if (req.timestamp == 0) {
-            revert Errors.RescueNotRequested();
+        // Check if token is valid
+        if (token == address(0)) {
+            revert Errors.ZeroAddress();
         }
-        
-        // Check if the rescue is unlocked and valid
-        uint256 unlockTime = req.timestamp + rs.rescueTimelock;
-        uint256 expiryTime = unlockTime + rs.rescueValidity;
-        
-        if (block.timestamp < unlockTime) {
-            revert Errors.RescueStillLocked(); // Still locked
-        }
-        
-        if (block.timestamp > expiryTime) {
-            revert Errors.RescueExpired(); // Expired
-        }
-        
-        // Store details before deletion
-        address receiver = req.receiver;
 
-        // Clear the rescue request first to prevent reentrancy
-        delete rs.rescueRequests[token];
-        
-        // Execute the rescue
-        uint256 amount;
+        // Get rescue request
+        RescuableStorage storage rs = rescuableStorage();
+        RescueRequest storage request = rs.rescueRequests[token];
+
+        // Check if rescue request exists
+        if (request.timestamp == 0) {
+            revert Errors.NotFound(ErrorType.RESCUE);
+        }
+
+        // Check if rescue is still locked
+        if (block.timestamp < request.timestamp + rs.rescueTimelock) {
+            revert Errors.Locked();
+        }
+
+        // Check if rescue has expired
+        if (block.timestamp > request.timestamp + rs.rescueTimelock + rs.rescueValidity) {
+            revert Errors.Expired(ErrorType.RESCUE);
+        }
+
+        // Get token balance
+        uint256 balance;
         if (token == address(1)) {
-            // Native token (ETH)
-            amount = address(this).balance;
-            (bool success, ) = payable(receiver).call{value: amount}("");
+            balance = address(this).balance;
+        } else {
+            balance = IERC20Metadata(token).balanceOf(address(this));
+        }
+
+        // Check if there's anything to rescue
+        if (balance == 0) {
+            revert Errors.ZeroValue();
+        }
+
+        // Clear rescue request
+        delete rs.rescueRequests[token];
+
+        // Transfer tokens
+        if (token == address(1)) {
+            (bool success, ) = request.receiver.call{value: balance}("");
             if (!success) {
-                revert Errors.RescueTransferFailed();
+                revert Errors.Failed(ErrorType.TRANSFER);
             }
         } else {
-            // ERC20 token
-            amount = IERC20Metadata(token).balanceOf(address(this));
-            IERC20Metadata(token).safeTransfer(receiver, amount);
+            IERC20Metadata(token).safeTransfer(request.receiver, balance);
         }
-        
-        emit Events.RescueExecuted(token, receiver, amount);
+
+        emit Events.RescueExecuted(token, request.receiver, balance);
     }
 
-    /// @notice Cancel a pending rescue request
+    /// @notice Cancel a rescue request
     /// @param token Token for which to cancel the rescue request
-    /// @param caller The address attempting to cancel
+    /// @param caller Address calling the cancel function
     function cancelRescue(address token, address caller) internal {
-        RescuableStorage storage rs = rescuableStorage();
-        RescueRequest storage req = rs.rescueRequests[token];
-        
-        // No rescue to cancel
-        if (req.timestamp == 0) {
-            revert Errors.RescueNotRequested();
+        // Check if token is valid
+        if (token == address(0)) {
+            revert Errors.ZeroAddress();
         }
-        
-        // Check permissions
-        bool isAdmin = AC.hasRole(AC.ADMIN_ROLE, caller);
-        bool isRequester = (req.receiver == caller);
 
-        if (!isAdmin && !isRequester) {
-            revert Errors.RestrictedAccess();
+        // Get rescue request
+        RescuableStorage storage rs = rescuableStorage();
+        RescueRequest storage request = rs.rescueRequests[token];
+
+        // Check if rescue request exists
+        if (request.timestamp == 0) {
+            revert Errors.NotFound(ErrorType.RESCUE);
         }
-        
-        // Clear the rescue request
+
+        // Check if caller is the requester or has admin role
+        if (caller != request.receiver && !AC.hasRole(AC.ADMIN_ROLE, caller)) {
+            revert Errors.Unauthorized(ErrorType.RESCUE);
+        }
+
+        // Clear rescue request
         delete rs.rescueRequests[token];
-        
+
         emit Events.RescueCancelled(token, caller);
-    }
-
-    /*═══════════════════════════════════════════════════════════════╗
-    ║                         INITIALIZATION                         ║
-    ╚═══════════════════════════════════════════════════════════════*/
-
-    /// @notice Initialize the rescue configuration
-    /// @param timelock The timelock for the rescue
-    /// @param validity The validity period for the rescue
-    function initialize() internal {
-        RescuableStorage storage rs = rescuableStorage();
-
-        if (rs.rescueTimelock != 0) {
-            revert Errors.AlreadyInitialized();
-        }
-
-        // Set default timelock settings
-        rs.rescueTimelock = DEFAULT_RESCUE_TIMELOCK;
-        rs.rescueValidity = DEFAULT_RESCUE_VALIDITY;
-        
-        emit Events.RescueConfigUpdated(DEFAULT_RESCUE_TIMELOCK, DEFAULT_RESCUE_VALIDITY);
     }
 }

@@ -48,6 +48,18 @@ enum ErrorType {
 }
 
 /*═══════════════════════════════════════════════════════════════╗
+║                          FEE TYPES                             ║
+╚═══════════════════════════════════════════════════════════════*/
+
+struct Fees {
+    uint16 entry;     // Fee charged when entering the vault (minting)
+    uint16 exit;      // Fee charged when exiting the vault (burning)
+    uint16 mgmt; // Ongoing management fee
+    uint16 perf; // Fee on profits
+    uint16 flash;      // Fee for flash loan operations
+}
+
+/*═══════════════════════════════════════════════════════════════╗
 ║                    POSITION MANAGEMENT TYPES                   ║
 ╚═══════════════════════════════════════════════════════════════*/
 
@@ -135,7 +147,6 @@ struct AccessControlStorage {
 
 // Core protocol storage
 struct ProtocolStorage {
-
     // Version control
     uint8 version;                             // protocol version
 
@@ -144,6 +155,9 @@ struct ProtocolStorage {
     mapping(address => AddressType) blacklist; // pools, tokens, users, etc
     bool restrictedMint;                       // uses whitelist if true
     bool paused;                               // Pause state for vault operations
+
+    // Protocol fees
+    Fees fees;                                // Protocol level fee configuration
 
     // Registries
     EnumerableSet.Bytes32Set supportedDEXes;   // Set of supported DEX types
@@ -187,7 +201,7 @@ struct VaultStorage {
     mapping(address => AddressType) whitelist;           // Allowed addresses (if restrictedMint is true) and pools
 
     // Fee management
-    uint16 feeBps;                                       // Manager fee in basis points
+    Fees fees;                                          // Fee configuration
     mapping(IERC20Metadata => uint256) accruedFees;      // Accrued fees per token
     mapping(IERC20Metadata => uint256) pendingFees;      // Pending fees per token
     uint256[] initialTokenAmounts;                       // Initial amount for each token in the vault
@@ -227,11 +241,11 @@ struct SwapperStorage {
 // Vault initialization parameters
 struct VaultInitParams {
     string name;                 // Vault name
-    string symbol;               // Vault symbol
+    string symbol;              // Vault symbol
     address token0;              // First token in the pair (lower address)
     address token1;              // Second token in the pair (higher address)
     uint256 initialToken0Amount; // Initial amount for token0
     uint256 initialToken1Amount; // Initial amount for token1
-    uint16 feeBps;               // Manager fee in basis points
+    Fees fees;                   // Fee configuration for the vault
     uint256 maxSupply;           // Maximum supply of vault shares
 }

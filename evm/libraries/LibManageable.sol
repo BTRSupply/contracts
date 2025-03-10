@@ -12,7 +12,12 @@ import {BTRErrors as Errors, BTREvents as Events} from "./BTREvents.sol";
 library LibManageable {
     // Fee constants
     uint16 internal constant MIN_FEE_BPS = 0;
-    uint16 internal constant MAX_FEE_BPS = 5000;
+    uint16 internal constant MAX_FEE_BPS = 5000; // 50%
+    uint16 internal constant MAX_FLASH_FEE_BPS = 5000; // 50%
+    uint16 internal constant MAX_PERFORMANCE_FEE_BPS = 5000; // 50%
+    uint16 internal constant MAX_ENTRY_FEE_BPS = 5000; // 50%
+    uint16 internal constant MAX_EXIT_FEE_BPS = 5000; // 50%
+    uint16 internal constant MAX_MGMT_FEE_BPS = 5000; // 50%
 
     /*═══════════════════════════════════════════════════════════════╗
     ║                             PAUSE                              ║
@@ -62,16 +67,47 @@ library LibManageable {
     ║                           MANAGEMENT                           ║
     ╚═══════════════════════════════════════════════════════════════*/
 
-    /// @notice Set manager fee - internal implementation
-    /// @param feeBps Manager fee in basis points
-    function setfeeBps(uint16 feeBps) internal {
-        if (feeBps > MAX_FEE_BPS || feeBps < MIN_FEE_BPS) {
-            revert Errors.Exceeds(feeBps, MAX_FEE_BPS);
-        }
+    /// @notice Set protocol level fees - internal implementation
+    /// @param fees New fee configuration
+    function setProtocolFees(Fees memory fees) internal {
+        // Validate fee ranges
+        if (fees.entry > MAX_ENTRY_FEE_BPS) revert Errors.Exceeds(fees.entry, MAX_ENTRY_FEE_BPS);
+        if (fees.exit > MAX_EXIT_FEE_BPS) revert Errors.Exceeds(fees.exit, MAX_EXIT_FEE_BPS);
+        if (fees.mgmt > MAX_MGMT_FEE_BPS) revert Errors.Exceeds(fees.mgmt, MAX_MGMT_FEE_BPS);
+        if (fees.perf > MAX_PERFORMANCE_FEE_BPS) revert Errors.Exceeds(fees.perf, MAX_PERFORMANCE_FEE_BPS);
+        if (fees.flash > MAX_FLASH_FEE_BPS) revert Errors.Exceeds(fees.flash, MAX_FLASH_FEE_BPS);
         
-        S.protocol().feeBps = feeBps;
+        S.protocol().fees = fees;
+        emit Events.ProtocolFeesUpdated(fees.entry, fees.exit, fees.mgmt, fees.perf, fees.flash);
+    }
 
-        emit Events.FeesSet(feeBps);
+    /// @notice Set vault level fees - internal implementation
+    /// @param vaultId ID of the vault
+    /// @param fees New fee configuration
+    function setVaultFees(uint32 vaultId, Fees memory fees) internal {
+        // Validate fee ranges
+        if (fees.entry > MAX_ENTRY_FEE_BPS) revert Errors.Exceeds(fees.entry, MAX_ENTRY_FEE_BPS);
+        if (fees.exit > MAX_EXIT_FEE_BPS) revert Errors.Exceeds(fees.exit, MAX_EXIT_FEE_BPS);
+        if (fees.mgmt > MAX_MGMT_FEE_BPS) revert Errors.Exceeds(fees.mgmt, MAX_MGMT_FEE_BPS);
+        if (fees.perf > MAX_PERFORMANCE_FEE_BPS) revert Errors.Exceeds(fees.perf, MAX_PERFORMANCE_FEE_BPS);
+        if (fees.flash > MAX_FLASH_FEE_BPS) revert Errors.Exceeds(fees.flash, MAX_FLASH_FEE_BPS);
+        
+        VaultStorage storage vs = S.protocol().vaults[vaultId];
+        vs.fees = fees;
+        emit Events.VaultFeesUpdated(vaultId, fees.entry, fees.exit, fees.mgmt, fees.perf, fees.flash);
+    }
+
+    /// @notice Get protocol level fees
+    /// @return Current fee configuration
+    function getProtocolFees() internal view returns (Fees memory) {
+        return S.protocol().fees;
+    }
+
+    /// @notice Get vault level fees
+    /// @param vaultId ID of the vault
+    /// @return Current fee configuration
+    function getVaultFees(uint32 vaultId) internal view returns (Fees memory) {
+        return S.protocol().vaults[vaultId].fees;
     }
 
     /// @notice Set restricted mint status for an address - internal implementation

@@ -28,3 +28,21 @@ node_modules/
 .env.*
 **/.env
 **/.env.*
+
+# Broadcast folders
+broadcast/
+**/broadcast/
+
+# Target folders
+target/
+**/target/
+
+# Dist folders
+dist/
+**/dist/
+
+# Lockfiles
+Cargo.lock
+**/Cargo.lock
+foundry.lock
+**/foundry.lock

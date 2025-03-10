@@ -1,0 +1,36 @@
+[package]
+name = "create3miner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+ethers = "2.0"
+hex = "0.4"
+rand = "0.8"
+rayon = "1.7"
+num_cpus = "1.15"
+regex = "1.9"
+
+# GPU dependencies
+wgpu = "24.0"
+bytemuck = { version = "1.14", features = ["derive"] }
+pollster = "0.3"
+futures = "0.3"
+env_logger = "0.10"
+log = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1.35", features = ["time"] }
+
+[features]
+default = ["gpu"]
+gpu = []
+
+[lib]
+name = "create3miner"
+path = "src/lib.rs"
+
+[[bin]]
+name = "create3miner"
+path = "src/main.rs"

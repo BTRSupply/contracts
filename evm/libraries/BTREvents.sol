@@ -64,6 +64,8 @@ library BTREvents {
   // Configuration events
   event LogSetInits(uint256 init0, uint256 init1);
   event FeesSet(uint16 feeBps);
+  event ProtocolFeesUpdated(uint16 entry, uint16 exit, uint16 mgmt, uint16 perf, uint16 flash);
+  event VaultFeesUpdated(uint32 indexed vaultId, uint16 entry, uint16 exit, uint16 mgmt, uint16 perf, uint16 flash);
   event CollectedFees(uint256 fee0, uint256 fee1);
   
   // Additional vault events
