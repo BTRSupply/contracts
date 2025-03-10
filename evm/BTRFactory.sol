@@ -2,15 +2,12 @@
 pragma solidity 0.8.28;
 
 import {BTRDiamond} from "./BTRDiamond.sol";
-import {BTRVaultInit} from "./BTRVaultInit.sol";
 import {DiamondCutFacet} from "./facets/DiamondCutFacet.sol";
 import {DiamondLoupeFacet} from "./facets/DiamondLoupeFacet.sol";
-import {ERC20Facet} from "./facets/ERC20Facet.sol";
-import {ERC4626Facet} from "./facets/ERC4626Facet.sol";
-import {VaultFacet} from "./facets/VaultFacet.sol";
 import {AccessControlFacet} from "./facets/AccessControlFacet.sol";
 import {IDiamondCut} from "./interfaces/IDiamondCut.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "./libraries/BTREvents.sol";
+import {LibAccessControl} from "./libraries/LibAccessControl.sol";
 
 /// @title BTRFactory
 /// @dev Factory for deploying new BTR vaults with diamond pattern
@@ -60,27 +57,6 @@ contract BTRFactory {
       functionSelectors: getFunctionSelectors("DiamondLoupeFacet")
     });
     
-    // ERC20Facet
-    facetCuts[1] = IDiamondCut.FacetCut({
-      facetAddress: erc20Facet,
-      action: IDiamondCut.FacetCutAction.Add,
-      functionSelectors: getFunctionSelectors("ERC20Facet")
-    });
-    
-    // ERC4626Facet
-    facetCuts[2] = IDiamondCut.FacetCut({
-      facetAddress: erc4626Facet,
-      action: IDiamondCut.FacetCutAction.Add,
-      functionSelectors: getFunctionSelectors("ERC4626Facet")
-    });
-    
-    // VaultFacet
-    facetCuts[3] = IDiamondCut.FacetCut({
-      facetAddress: vaultFacet,
-      action: IDiamondCut.FacetCutAction.Add,
-      functionSelectors: getFunctionSelectors("VaultFacet")
-    });
-    
     // AccessControlFacet
     facetCuts[4] = IDiamondCut.FacetCut({
       facetAddress: accessControlFacet,
@@ -103,18 +79,38 @@ contract BTRFactory {
     BTRDiamond diamond = new BTRDiamond(_owner, diamondCutFacet);
     vault = address(diamond);
     
-    // Create and initialize the diamond with the pre-computed facet cuts
-    BTRVaultInit vaultInit = new BTRVaultInit();
-    
-    // Prepare initialization data
-    bytes memory initData = abi.encodeWithSelector(
-      BTRVaultInit.init.selector,
-      _managers,
-      _keepers
-    );
-    
     // Call diamondCut to add the pre-deployed facets
-    DiamondCutFacet(vault).diamondCut(facetCuts, address(vaultInit), initData);
+    DiamondCutFacet(vault).diamondCut(facetCuts, address(0), "");
+    
+    // Initialize AccessControl facet
+    (bool success, ) = vault.call(
+        abi.encodeWithSelector(AccessControlFacet.initialize.selector, _owner)
+    );
+    require(success, "AccessControl initialization failed");
+    
+    // Set up managers
+    for (uint256 i = 0; i < _managers.length; i++) {
+        (success, ) = vault.call(
+            abi.encodeWithSelector(
+                AccessControlFacet.grantRole.selector,
+                LibAccessControl.MANAGER_ROLE,
+                _managers[i]
+            )
+        );
+        require(success, "Manager role grant failed");
+    }
+    
+    // Set up keepers
+    for (uint256 i = 0; i < _keepers.length; i++) {
+        (success, ) = vault.call(
+            abi.encodeWithSelector(
+                AccessControlFacet.grantRole.selector,
+                LibAccessControl.KEEPER_ROLE,
+                _keepers[i]
+            )
+        );
+        require(success, "Keeper role grant failed");
+    }
     
     emit VaultCreated(vault, _owner);
   }
@@ -130,53 +126,6 @@ contract BTRFactory {
       selectors[4] = bytes4(keccak256("supportsInterface(bytes4)"));
       return selectors;
     } 
-    else if (keccak256(bytes(_facetName)) == keccak256(bytes("ERC20Facet"))) {
-      bytes4[] memory selectors = new bytes4[](9);
-      selectors[0] = bytes4(keccak256("name()"));
-      selectors[1] = bytes4(keccak256("symbol()"));
-      selectors[2] = bytes4(keccak256("decimals()"));
-      selectors[3] = bytes4(keccak256("totalSupply()"));
-      selectors[4] = bytes4(keccak256("balanceOf(address)"));
-      selectors[5] = bytes4(keccak256("transfer(address,uint256)"));
-      selectors[6] = bytes4(keccak256("allowance(address,address)"));
-      selectors[7] = bytes4(keccak256("approve(address,uint256)"));
-      selectors[8] = bytes4(keccak256("transferFrom(address,address,uint256)"));
-      return selectors;
-    }
-    else if (keccak256(bytes(_facetName)) == keccak256(bytes("ERC4626Facet"))) {
-      bytes4[] memory selectors = new bytes4[](14);
-      selectors[0] = bytes4(keccak256("asset()"));
-      selectors[1] = bytes4(keccak256("totalAssets()"));
-      selectors[2] = bytes4(keccak256("convertToShares(uint256)"));
-      selectors[3] = bytes4(keccak256("convertToAssets(uint256)"));
-      selectors[4] = bytes4(keccak256("maxDeposit(address)"));
-      selectors[5] = bytes4(keccak256("previewDeposit(uint256)"));
-      selectors[6] = bytes4(keccak256("deposit(uint256,address)"));
-      selectors[7] = bytes4(keccak256("maxMint(address)"));
-      selectors[8] = bytes4(keccak256("previewMint(uint256)"));
-      selectors[9] = bytes4(keccak256("mint(uint256,address)"));
-      selectors[10] = bytes4(keccak256("maxWithdraw(address)"));
-      selectors[11] = bytes4(keccak256("previewWithdraw(uint256)"));
-      selectors[12] = bytes4(keccak256("withdraw(uint256,address,address)"));
-      selectors[13] = bytes4(keccak256("redeem(uint256,address,address)"));
-      return selectors;
-    }
-    else if (keccak256(bytes(_facetName)) == keccak256(bytes("VaultFacet"))) {
-      // Only a subset shown for brevity
-      bytes4[] memory selectors = new bytes4[](5);
-      selectors[0] = bytes4(keccak256("initialize(string,string,address,address,uint256,uint256,uint16,uint256)"));
-      selectors[1] = bytes4(keccak256("rebalance((address[],address[]))"));
-      selectors[2] = bytes4(keccak256("setfeeBps(uint16)"));
-      selectors[3] = bytes4(keccak256("pause()"));
-      selectors[4] = bytes4(keccak256("unpause()"));
-      return selectors;
-    }
-    else if (keccak256(bytes(_facetName)) == keccak256(bytes("OwnershipFacet"))) {
-      bytes4[] memory selectors = new bytes4[](2);
-      selectors[0] = bytes4(keccak256("owner()"));
-      selectors[1] = bytes4(keccak256("transferOwnership(address)"));
-      return selectors;
-    }
     else if (keccak256(bytes(_facetName)) == keccak256(bytes("AccessControlFacet"))) {
       bytes4[] memory selectors = new bytes4[](8);
       selectors[0] = bytes4(keccak256("hasRole(bytes32,address)"));

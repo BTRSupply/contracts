@@ -93,10 +93,10 @@ struct SwapPayload {
 // Diamond Storage for Diamond standard
 struct DiamondStorage {
     // maps function selectors to the facets that execute the functions
-    // and maps the selectors to their position in the selectorSlots array
+    // and maps the selectors to their position in the selectors array
     mapping(bytes4 => bytes32) facetAddressAndSelectorPosition;
-    // array of selector slots
-    bytes32[] selectorSlots;
+    // array of function selectors
+    bytes4[] selectors;
     // maps facet addresses to their position in the facetAddresses array
     mapping(address => uint256) facetAddressPosition;
     // array of facet addresses

@@ -24,15 +24,27 @@ library LibAccessControl {
     /// @notice Timelock constants for role acceptance
     /// @dev GRANT_DELAY: Time that must pass before a role can be accepted
     ///      ACCEPT_WINDOW: Time window during which a role can be accepted after the delay
-    uint256 public constant GRANT_DELAY = 2 days;
-    uint256 public constant ACCEPT_WINDOW = 7 days;
-
+    uint256 public constant DEFAULT_GRANT_DELAY = 2 days;
+    uint256 public constant DEFAULT_ACCEPT_WINDOW = 7 days;
+    uint256 public constant MIN_GRANT_DELAY = 1 days;
+    uint256 public constant MAX_GRANT_DELAY = 30 days;
+    uint256 public constant MIN_ACCEPT_WINDOW = 1 days;
+    uint256 public constant MAX_ACCEPT_WINDOW = 30 days;
     /// @dev Predefined roles
-    bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
     bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
+
+    /*═══════════════════════════════════════════════════════════════╗
+    ║                            VIEW                                ║
+    ╚═══════════════════════════════════════════════════════════════*/
+
+    /// @return Address of the admin
+    function admin() internal view returns (address) {
+        address[] memory admins = AC.ADMIN_ROLE.getMembers();
+        return admins.length > 0 ? admins[0] : address(0);
+    }
 
     /*═══════════════════════════════════════════════════════════════╗
     ║                       ROLE MANAGEMENT                          ║
@@ -51,12 +63,6 @@ library LibAccessControl {
         return S.accessControl().roles[role].members.contains(account);
     }
 
-    /// @notice Checks if `msg.sender` has `role`
-    /// @param role The role to check
-    function checkRole(bytes32 role) internal view {
-        checkRole(role, msg.sender);
-    }
-
     /// @notice Checks if `account` has `role`
     /// @param role The role to check
     /// @param account The account to check
@@ -64,6 +70,25 @@ library LibAccessControl {
         if (!hasRole(role, account)) {
             revert Errors.Unauthorized();
         }
+    }
+
+    /// @notice Checks if `msg.sender` has `role`
+    /// @param role The role to check
+    function checkRole(bytes32 role) internal view {
+        checkRole(role, msg.sender);
+    }
+
+    /// @notice Checks if `account` has admin role for `role`
+    /// @param role The role to check admin access for
+    /// @param account The account to check admin access for
+    function checkRoleAdmin(bytes32 role, address account) internal view {
+        checkRole(getRoleAdmin(role), account);
+    }
+
+    /// @notice Checks if msg.sender has admin role for `role`
+    /// @param role The role to check admin access for
+    function checkRoleAdmin(bytes32 role) internal view {
+        checkRoleAdmin(role, msg.sender);
     }
 
     /// @notice Gets the admin role for a specific role
@@ -76,7 +101,7 @@ library LibAccessControl {
     /// @notice Gets all members of a role
     /// @param role The role to get members for
     /// @return Array of addresses with the role
-    function getRoleMembers(bytes32 role) internal view returns (address[] memory) {
+    function getMembers(bytes32 role) internal view returns (address[] memory) {
         AccessControlStorage storage acs = S.accessControl();
         RoleData storage roleData = acs.roles[role];
         
@@ -143,6 +168,10 @@ library LibAccessControl {
     /// @param role The role to set the admin for
     /// @param adminRole The admin role to set
     function setRoleAdmin(bytes32 role, bytes32 adminRole) internal {
+        if (role == ADMIN_ROLE) {
+            revert Errors.Unauthorized(); // 0x00 will always be the admin's admin role (top of the hierarchy)
+        }
+
         AccessControlStorage storage acs = S.accessControl();
         RoleData storage roleData = acs.roles[role];
         
@@ -186,6 +215,8 @@ library LibAccessControl {
             timestamp: uint64(block.timestamp),
             role: role
         });
+
+        emit Events.RoleAcceptanceCreated(role, account, sender);
     }
 
     /// @notice Process a role acceptance
@@ -209,7 +240,18 @@ library LibAccessControl {
     /// @notice Cancel a pending role grant
     /// @param account The account to cancel for
     function cancelRoleAcceptance(address account) internal {
-        delete S.accessControl().pendingAcceptance[account];
+        AccessControlStorage storage acs = S.accessControl();
+        PendingAcceptance memory acceptance = acs.pendingAcceptance[account];
+        
+        // Only allow admin, role admin, or the account itself to cancel
+        if (!hasRole(ADMIN_ROLE, msg.sender) && 
+            !hasRole(getRoleAdmin(acceptance.role), msg.sender) &&
+            msg.sender != account) {
+            revert Errors.Unauthorized();
+        }
+
+        emit Events.RoleAcceptanceCancelled(acceptance.role, account, msg.sender);
+        delete acs.pendingAcceptance[account];
     }
 
     /// @notice Grant a role to an account
@@ -222,6 +264,9 @@ library LibAccessControl {
         if (!roleData.members.contains(account)) {
             roleData.members.add(account);
             emit Events.RoleGranted(role, account, msg.sender);
+            if (role == ADMIN_ROLE) {
+                emit Events.OwnershipTransferred(msg.sender, account);
+            }
         }
     }
 
@@ -248,20 +293,20 @@ library LibAccessControl {
 
     /// @notice Initialize the access control system
     /// @param admin The initial admin address
-    function initializeAccessControl(address admin) internal {
+    function initialize(address admin) internal {
         if (admin == address(0)) {
             revert Errors.ZeroAddress();
         }
 
         // Check if already initialized
-        if (hasRole(ADMIN_ROLE, admin)) {
-            revert Errors.AccessControlAlreadyInitialized();
+        if (admin() != address(0)) {
+            revert Errors.AlreadyInitialized();
         }
-        
+
         // Grant initial roles
         grantRole(ADMIN_ROLE, admin);
         grantRole(MANAGER_ROLE, admin);
-        
+
         // Set up role admins
         setRoleAdmin(KEEPER_ROLE, ADMIN_ROLE);
         setRoleAdmin(MANAGER_ROLE, ADMIN_ROLE);
@@ -270,9 +315,9 @@ library LibAccessControl {
 
         // Set default timelock settings
         AccessControlStorage storage acs = S.accessControl();
-        acs.grantDelay = GRANT_DELAY;
-        acs.acceptWindow = ACCEPT_WINDOW;
+        acs.grantDelay = DEFAULT_GRANT_DELAY;
+        acs.acceptWindow = DEFAULT_ACCEPT_WINDOW;
         
-        emit Events.TimelockConfigUpdated(GRANT_DELAY, ACCEPT_WINDOW);
+        emit Events.TimelockConfigUpdated(DEFAULT_GRANT_DELAY, DEFAULT_ACCEPT_WINDOW);
     }
-} 
+}

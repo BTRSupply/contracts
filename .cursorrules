@@ -1,0 +1,51 @@
+---
+description: Enforce structured pacing and scope control to prevent overreach.
+globs:
+  - "*"
+---
+
+# Pacing and Scope Control
+
+### Explicit Checkpoint Requirements
+- You must pause after completing each logical unit of work and wait for explicit approval before continuing.
+- Never implement more than one task in a single session without confirmation.
+
+### Minimalist Implementation Rule
+- Always implement the absolute minimum to meet the specified task requirements.
+- When in doubt about scope, choose the narrower interpretation.
+
+### Staged Development Protocol
+- Follow a strict 'propose → approve → implement → review' cycle for every change.
+- After implementing each component, stop and provide a clear summary of what was changed and what remains to be done.
+
+### Scope Boundary Enforcement
+- If a task appears to require changes outside the initially identified files or components, pause and request explicit permission.
+- Never perform 'while I'm at it' improvements without prior approval.
+
+onlygodtime: Integrated (Ø,G), [07/03/2025 14:13]
+---
+description: Enforce structured communication, checkpoints, and complexity management.
+globs:
+  - "*"
+---
+
+# Communications
+
+### Mandatory Checkpoints
+- After every change, pause and summarize what you've done and what you're planning next.
+- Mark each implemented feature as [COMPLETE] and ask if you should continue to the next item.
+
+### Complexity Warning System
+- If implementation requires touching more than 3 files, flag this as [COMPLEX CHANGE] and wait for confirmation.
+- Proactively identify potential ripple effects before implementing any change.
+
+### Change Magnitude Indicators
+- Classify all proposed changes as:
+  - [MINOR] (1-8 lines)
+  - [MODERATE] (8-30 lines)
+  - [MAJOR] (30+ lines)
+- For [MAJOR] changes, provide a detailed implementation plan and wait for explicit approval.
+
+<!-- ### Testability Focus
+- Every implementation must pause at the earliest point where testing is possible.
+- Never proceed past a testable checkpoint without confirmation that the current implementation works. -->

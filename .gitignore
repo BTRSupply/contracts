@@ -18,4 +18,10 @@ evm-legacy/
 *~
 
 # Node.js
-node_modules/ 
+node_modules/
+
+# Environment files
+.env
+.env.*
+**/.env
+**/.env.*

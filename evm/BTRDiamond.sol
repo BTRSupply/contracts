@@ -25,12 +25,12 @@ contract BTRDiamond {
     // Initialize access control directly from BTRStorage
     AccessControlStorage storage acs = S.accessControl();
     
-    // Set up ADMIN_ROLE and DEFAULT_ADMIN_ROLE for ownership management
-    acs.roles[LibAccessControl.DEFAULT_ADMIN_ROLE].members[_owner] = true;
+    // Set up ADMIN_ROLE and ADMIN_ROLE for ownership management
+    acs.roles[LibAccessControl.ADMIN_ROLE].members[_owner] = true;
     acs.roles[LibAccessControl.ADMIN_ROLE].members[_owner] = true;
     
     // Configure admin role hierarchy
-    acs.roles[LibAccessControl.ADMIN_ROLE].adminRole = LibAccessControl.DEFAULT_ADMIN_ROLE;
+    acs.roles[LibAccessControl.ADMIN_ROLE].adminRole = LibAccessControl.ADMIN_ROLE;
     
     // Add diamondCut function
     bytes4[] memory selectors = new bytes4[](1);
@@ -53,7 +53,7 @@ contract BTRDiamond {
     
     // Get facet from function selector
     address facet = address(bytes20(ds.facetAddressAndSelectorPosition[msg.sig]));
-    if (facet == address(0)) revert Errors.FunctionNotFound();
+    if (facet == address(0)) revert Errors.NotFound(ErrorType.FUNCTION);
     
     // Execute external function from facet using delegatecall and return any value
     assembly {

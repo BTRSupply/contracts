@@ -86,11 +86,6 @@ library BTREvents {
   event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
   event Withdraw(address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares);
 
-  // Rescue events
-  event RescueRequested(address indexed token, address indexed receiver, uint64 timestamp);
-  event RescueExecuted(address indexed token, address indexed receiver, uint256 amount);
-  event RescueCancelled(address indexed token, address indexed requester);
-  
   // Position management events
   event PositionMinted(address indexed pool, int24 lowerTick, int24 upperTick, uint128 liquidity, uint256 amount0, uint256 amount1);
   event PositionWithdrawn(address indexed pool, int24 lowerTick, int24 upperTick, uint128 liquidity, uint256 burn0, uint256 burn1, uint256 fee0, uint256 fee1);
@@ -106,9 +101,16 @@ library BTREvents {
   event RoleAdminChanged(bytes32 indexed role, bytes32 indexed previousAdminRole, bytes32 indexed newAdminRole);
   event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
   event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
+  event RoleAcceptanceCreated(bytes32 indexed role, address indexed account, address indexed sender);
   event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
   event TimelockConfigUpdated(uint256 grantDelay, uint256 acceptWindow);
   
+  // Rescuable events
+  event RescueConfigUpdated(uint64 timelock, uint64 validity);
+  event RescueRequested(address indexed token, address indexed receiver, uint64 timestamp);
+  event RescueExecuted(address indexed token, address indexed receiver, uint256 amount);
+  event RescueCancelled(address indexed token, address indexed requester);
+
   // Swapper events
   event Swapped(address indexed user, address indexed assetIn, address indexed assetOut, uint256 amountIn, uint256 amountOut);
   event AddressWhitelisted(address indexed account);

@@ -2,44 +2,21 @@
 pragma solidity 0.8.28;
 
 import {LibDiamond} from "../libraries/LibDiamond.sol";
-import {LibAccessControl} from "../libraries/LibAccessControl.sol";
+import {LibAccessControl as AC} from "../libraries/LibAccessControl.sol";
 import {BTRStorage as S} from "../libraries/BTRStorage.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "../libraries/BTREvents.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {IERC173} from "../interfaces/IERC173.sol";
 import {AccessControlStorage, PendingAcceptance} from "../BTRTypes.sol";
+import {PermissionedFacet} from "./abstract/PermissionedFacet.sol";
 
 /// @title AccessControlFacet
 /// @notice Role-based access control facet for BTR contract
 /// @dev Inspired by Astrolab's AccessController and OZ's AccessControlEnumerable
 /// Also implements ERC173 for ownership backwards compatibility
-contract AccessControlFacet is IERC173 {
+contract AccessControlFacet is PermissionedFacet, IERC173 {
   using EnumerableSet for EnumerableSet.AddressSet;
-
-  /*═══════════════════════════════════════════════════════════════╗
-  ║                           CONSTANTS                            ║
-  ╚═══════════════════════════════════════════════════════════════*/
-
-  uint256 public constant MIN_GRANT_DELAY = 1 days;
-  uint256 public constant MAX_GRANT_DELAY = 30 days;
-  uint256 public constant MIN_ACCEPT_WINDOW = 1 days;
-  uint256 public constant MAX_ACCEPT_WINDOW = 30 days;
-
-  /// @dev Predefined roles
-  bytes32 public constant ADMIN_ROLE = LibAccessControl.ADMIN_ROLE;
-  bytes32 public constant MANAGER_ROLE = LibAccessControl.MANAGER_ROLE;
-  bytes32 public constant KEEPER_ROLE = LibAccessControl.KEEPER_ROLE;
-  bytes32 public constant DEFAULT_ADMIN_ROLE = LibAccessControl.DEFAULT_ADMIN_ROLE;
-
-  /*═══════════════════════════════════════════════════════════════╗
-  ║                           MODIFIERS                            ║
-  ╚═══════════════════════════════════════════════════════════════*/
-
-  /// @notice Checks if the caller has a role
-  modifier onlyRole(bytes32 role) {
-    LibAccessControl.checkRole(role);
-    _;
-  }
+  using AC for bytes32;
 
   /*═══════════════════════════════════════════════════════════════╗
   ║                      ERC-173 COMPLIANCE                        ║
@@ -48,28 +25,20 @@ contract AccessControlFacet is IERC173 {
   /// @notice Returns the address of the owner (ERC-173)
   /// @return owner_ of the contract (the admin role holder)
   function owner() external view override returns (address owner_) {
-    // Get the first address with the admin role
-    address[] memory admins = LibAccessControl.getRoleMembers(ADMIN_ROLE);
-    
-    if (admins.length > 0) {
-      return admins[0];
-    }
-
-    // If no ADMIN_ROLE is set, return zero address
-    return address(0);
+    return admin();
   }
 
   /// @notice Transfers ownership of the contract to a new address (ERC-173)
   /// @param _newOwner The address to transfer ownership to
-  function transferOwnership(address _newOwner) external override onlyRole(ADMIN_ROLE) {
+  function transferOwnership(address _newOwner) external override onlyAdmin {
     // Require non-zero address
     if (_newOwner == address(0)) {
         revert Errors.ZeroAddress();
     }
     
     // Set up pending acceptance for admin role (this is the primary ownership mechanism)
-    LibAccessControl.createRoleAcceptance(ADMIN_ROLE, _newOwner, msg.sender);
-    
+    AC.ADMIN_ROLE.createRoleAcceptance(_newOwner, msg.sender);
+
     // Emit ownership transfer event
     emit Events.OwnershipTransferred(msg.sender, _newOwner);
   }
@@ -78,39 +47,18 @@ contract AccessControlFacet is IERC173 {
   ║                             VIEWS                              ║
   ╚═══════════════════════════════════════════════════════════════*/
 
-  /// @notice Checks if `account` has `role`
-  /// @param role The role to check
-  /// @param account The account to check
-  /// @return bool Whether the account has the role
-  function hasRole(bytes32 role, address account) public view returns (bool) {
-    return LibAccessControl.hasRole(role, account);
-  }
-
-  /// @notice Checks if `msg.sender` has `role`
-  /// @param role The role to check
-  function checkRole(bytes32 role) public view {
-    LibAccessControl.checkRole(role);
-  }
-
-  /// @notice Checks if `account` has `role`
-  /// @param role The role to check
-  /// @param account The account to check
-  function checkRole(bytes32 role, address account) public view {
-    LibAccessControl.checkRole(role, account);
-  }
-
   /// @notice Gets the admin role for a specific role
   /// @param role The role to get the admin for
   /// @return bytes32 The admin role
   function getRoleAdmin(bytes32 role) public view returns (bytes32) {
-    return LibAccessControl.getRoleAdmin(role);
+    return role.getRoleAdmin();
   }
 
   /// @notice Gets all members of a role
   /// @param role The role to get members for
   /// @return Array of addresses with the role
   function getMembers(bytes32 role) public view returns (address[] memory) {
-    return LibAccessControl.getRoleMembers(role);
+    return role.getMembers();
   }
 
   /// @notice Get current grant delay and accept window
@@ -136,7 +84,7 @@ contract AccessControlFacet is IERC173 {
     // Grant the keeper role instantly (no attack surface here)
     if (acceptance.role == KEEPER_ROLE) return;
     
-    (uint256 grantDelay, uint256 acceptWindow) = LibAccessControl.getTimelockConfig();
+    (uint256 grantDelay, uint256 acceptWindow) = AC.getTimelockConfig();
     
     // Check expiry
     if (
@@ -166,7 +114,7 @@ contract AccessControlFacet is IERC173 {
       uint64 timestamp
     )
   {
-    PendingAcceptance memory acceptance = LibAccessControl.getPendingAcceptance(account);
+    PendingAcceptance memory acceptance = AC.getPendingAcceptance(account);
     
     return (
       acceptance.role,
@@ -177,46 +125,17 @@ contract AccessControlFacet is IERC173 {
 
   /// @return Address of the admin
   function admin() external view returns (address) {
-    address[] memory admins = getMembers(ADMIN_ROLE);
-    return admins.length > 0 ? admins[0] : address(0);
+    return AC.admin();
   }
 
   /// @return Array of MANAGER addresses
   function getManagers() external view returns (address[] memory) {
-    return getMembers(MANAGER_ROLE);
+    return AC.MANAGER_ROLE.getMembers();
   }
 
   /// @return Array of KEEPER addresses
   function getKeepers() external view returns (address[] memory) {
-    return getMembers(KEEPER_ROLE);
-  }
-
-  /// @notice Checks if account is an ADMIN
-  /// @param account The account to check
-  /// @return bool Whether the account is an admin
-  function isAdmin(address account) external view returns (bool) {
-    return hasRole(ADMIN_ROLE, account);
-  }
-
-  /// @notice Checks if account is a MANAGER
-  /// @param account The account to check
-  /// @return bool Whether the account is a manager
-  function isManager(address account) external view returns (bool) {
-    return hasRole(MANAGER_ROLE, account);
-  }
-
-  /// @notice Checks if account is a KEEPER
-  /// @param account The account to check
-  /// @return bool Whether the account is a keeper
-  function isKeeper(address account) external view returns (bool) {
-    return hasRole(KEEPER_ROLE, account);
-  }
-
-  /// @notice Checks if account is a TREASURY
-  /// @param account The account to check
-  /// @return bool Whether the account is a treasury
-  function isTreasury(address account) external view returns (bool) {
-    return hasRole(TREASURY_ROLE, account);
+    return AC.KEEPER_ROLE.getMembers();
   }
 
   /*═══════════════════════════════════════════════════════════════╗
@@ -225,12 +144,8 @@ contract AccessControlFacet is IERC173 {
 
   /// @notice Initialize the access control with default roles
   /// @param initialAdmin The initial admin address
-  function initialize(address initialAdmin) external {
-    // Only admin can initialize
-    LibAccessControl.checkRole(LibAccessControl.DEFAULT_ADMIN_ROLE);
-    
-    // Initialize access control
-    LibAccessControl.initializeAccessControl(initialAdmin);
+  function initialize(address admin) external {
+    AC.initialize(admin);
   }
 
   /*═══════════════════════════════════════════════════════════════╗
@@ -241,20 +156,18 @@ contract AccessControlFacet is IERC173 {
   /// @param role The role to set the admin for
   /// @param adminRole The admin role to set
   function setRoleAdmin(bytes32 role, bytes32 adminRole) external onlyRole(ADMIN_ROLE) {
-    LibAccessControl.setRoleAdmin(role, adminRole);
+    AC.setRoleAdmin(role, adminRole);
   }
 
   /// @notice Update timelock configuration
   /// @param grantDelay New grant delay (in seconds)
   /// @param acceptWindow New accept window (in seconds)
-  function setTimelockConfig(uint256 grantDelay, uint256 acceptWindow) external onlyRole(ADMIN_ROLE) {
-    if (grantDelay < MIN_GRANT_DELAY || grantDelay > MAX_GRANT_DELAY) {
-        revert Errors.InvalidGrantDelay(grantDelay, MIN_GRANT_DELAY, MAX_GRANT_DELAY);
+  function setTimelockConfig(uint256 grantDelay, uint256 acceptWindow) external onlyAdmin {
+    if (grantDelay < AC.MIN_GRANT_DELAY || grantDelay > AC.MAX_GRANT_DELAY ||
+        acceptWindow < AC.MIN_ACCEPT_WINDOW || acceptWindow > AC.MAX_ACCEPT_WINDOW) {
+        revert Errors.InvalidGrantDelay(grantDelay, AC.MIN_GRANT_DELAY, AC.MAX_GRANT_DELAY);
     }
-    if (acceptWindow < MIN_ACCEPT_WINDOW || acceptWindow > MAX_ACCEPT_WINDOW) {
-        revert Errors.InvalidAcceptWindow(acceptWindow, MIN_ACCEPT_WINDOW, MAX_ACCEPT_WINDOW);
-    }
-    LibAccessControl.setTimelockConfig(grantDelay, acceptWindow);
+    AC.setTimelockConfig(grantDelay, acceptWindow);
   }
 
   /// @notice Grants role to account
@@ -263,11 +176,11 @@ contract AccessControlFacet is IERC173 {
   function grantRole(
     bytes32 role,
     address account
-  ) external onlyRole(getRoleAdmin(role)) {
-    if (hasRole(role, account)) {
-        revert Errors.RoleAlreadyAssigned();
+  ) external onlyRoleAdmin(role) {
+    if (AC.hasRole(role, account)) {
+      revert Errors.RoleAlreadyAssigned();
     }
-    LibAccessControl.createRoleAcceptance(role, account, msg.sender);
+    AC.createRoleAcceptance(role, account, msg.sender);
   }
 
   /// @notice Revokes role from account
@@ -276,26 +189,25 @@ contract AccessControlFacet is IERC173 {
   function revokeRole(
     bytes32 role,
     address account
-  ) external onlyRole(getRoleAdmin(role)) {
-    LibAccessControl.revokeRole(role, account);
+  ) external onlyRoleAdmin(role) {
+    AC.revokeRole(role, account);
   }
 
   /// @notice Renounces a role (self-revocation)
   /// @param role The role to renounce
   function renounceRole(bytes32 role) external {
-    LibAccessControl.revokeRole(role, msg.sender);
+    AC.revokeRole(role, msg.sender);
   }
 
   /// @notice Accepts a pending role grant
   /// @param role The role to accept
   function acceptRole(bytes32 role) external {
-    LibAccessControl.processRoleAcceptance(role, msg.sender);
+    AC.processRoleAcceptance(role, msg.sender);
   }
 
   /// @notice Cancel a pending role grant
-  /// @param role The role to cancel
   /// @param account The account to cancel for
-  function cancelRoleGrant(bytes32 role, address account) external onlyRole(getRoleAdmin(role)) {
-    LibAccessControl.cancelRoleAcceptance(account);
+  function cancelRoleGrant(address account) external {
+    AC.cancelRoleAcceptance(account);
   }
 }

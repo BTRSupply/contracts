@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {LibAccessControl} from "./LibAccessControl.sol";
+import {LibAccessControl as AC} from "./LibAccessControl.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "./BTREvents.sol";
 
 /// @title LibRescuable
@@ -23,14 +23,20 @@ library LibRescuable {
 
     struct RescuableStorage {
         mapping(address => RescueRequest) rescueRequests;
+        uint64 rescueTimelock;
+        uint64 rescueValidity;
     }
 
     /*═══════════════════════════════════════════════════════════════╗
     ║                           CONSTANTS                            ║
     ╚═══════════════════════════════════════════════════════════════*/
 
-    uint64 public constant RESCUE_TIMELOCK = 2 days;
-    uint64 public constant RESCUE_VALIDITY = 7 days;
+    uint64 public constant DEFAULT_RESCUE_TIMELOCK = 2 days;
+    uint64 public constant DEFAULT_RESCUE_VALIDITY = 7 days;
+    uint64 public constant MIN_RESCUE_TIMELOCK = 1 days;
+    uint64 public constant MAX_RESCUE_TIMELOCK = 7 days;
+    uint64 public constant MIN_RESCUE_VALIDITY = 1 days;
+    uint64 public constant MAX_RESCUE_VALIDITY = 30 days;
 
     // Diamond storage pattern - unique storage slot for rescue data
     bytes32 private constant RESCUABLE_STORAGE_POSITION = keccak256("btr.vault.rescue.storage");
@@ -61,16 +67,17 @@ library LibRescuable {
         uint64 timestamp,
         uint8 status
     ) {
-        RescueRequest memory req = rescuableStorage().rescueRequests[token];
+        RescuableStorage storage rs = rescuableStorage();
+        RescueRequest memory req = rs.rescueRequests[token];
         
         receiver = req.receiver;
         timestamp = req.timestamp;
         
         if (req.timestamp == 0) {
             status = 0; // No rescue request
-        } else if (block.timestamp < (req.timestamp + RESCUE_TIMELOCK)) {
+        } else if (block.timestamp < (req.timestamp + rs.rescueTimelock)) {
             status = 1; // Locked
-        } else if (block.timestamp <= (req.timestamp + RESCUE_TIMELOCK + RESCUE_VALIDITY)) {
+        } else if (block.timestamp <= (req.timestamp + rs.rescueTimelock + rs.rescueValidity)) {
             status = 2; // Unlocked and valid
         } else {
             status = 3; // Expired
@@ -81,26 +88,29 @@ library LibRescuable {
     /// @param token Token to check
     /// @return Whether the rescue request is locked
     function isRescueLocked(address token) internal view returns (bool) {
-        RescueRequest memory req = rescuableStorage().rescueRequests[token];
-        return req.timestamp != 0 && block.timestamp < (req.timestamp + RESCUE_TIMELOCK);
+        RescuableStorage storage rs = rescuableStorage();
+        RescueRequest memory req = rs.rescueRequests[token];
+        return req.timestamp != 0 && block.timestamp < (req.timestamp + rs.rescueTimelock);
     }
 
     /// @notice Check if a rescue request has expired
     /// @param token Token to check
     /// @return Whether the rescue request has expired
     function isRescueExpired(address token) internal view returns (bool) {
-        RescueRequest memory req = rescuableStorage().rescueRequests[token];
-        return req.timestamp != 0 && block.timestamp > (req.timestamp + RESCUE_TIMELOCK + RESCUE_VALIDITY);
+        RescuableStorage storage rs = rescuableStorage();
+        RescueRequest memory req = rs.rescueRequests[token];
+        return req.timestamp != 0 && block.timestamp > (req.timestamp + rs.rescueTimelock + rs.rescueValidity);
     }
 
     /// @notice Check if a rescue request is unlocked and valid
     /// @param token Token to check
     /// @return Whether the rescue request is unlocked and valid
     function isRescueUnlocked(address token) internal view returns (bool) {
-        RescueRequest memory req = rescuableStorage().rescueRequests[token];
-        uint256 expiryTime = req.timestamp + RESCUE_TIMELOCK + RESCUE_VALIDITY;
+        RescuableStorage storage rs = rescuableStorage();
+        RescueRequest memory req = rs.rescueRequests[token];
+        uint256 expiryTime = req.timestamp + rs.rescueTimelock + rs.rescueValidity;
         return req.timestamp != 0 && 
-               block.timestamp >= (req.timestamp + RESCUE_TIMELOCK) && 
+               block.timestamp >= (req.timestamp + rs.rescueTimelock) && 
                block.timestamp <= expiryTime;
     }
 
@@ -117,12 +127,13 @@ library LibRescuable {
         }
         
         // Get the storage for this rescue request
-        RescueRequest storage req = rescuableStorage().rescueRequests[token];
+        RescuableStorage storage rs = rescuableStorage();
+        RescueRequest storage req = rs.rescueRequests[token];
         
         // Ensure there's no active unlocked rescue request
         if (req.timestamp != 0) {
-            uint256 unlockTime = req.timestamp + RESCUE_TIMELOCK;
-            uint256 expiryTime = unlockTime + RESCUE_VALIDITY;
+            uint256 unlockTime = req.timestamp + rs.rescueTimelock;
+            uint256 expiryTime = unlockTime + rs.rescueValidity;
             
             if (block.timestamp >= unlockTime && block.timestamp <= expiryTime) {
                 revert Errors.RescueInProgress();
@@ -140,7 +151,8 @@ library LibRescuable {
     /// @param token Token to be rescued - use address(1) for native tokens (ETH)
     function executeRescue(address token) internal {
         // Get the storage for this rescue request
-        RescueRequest storage req = rescuableStorage().rescueRequests[token];
+        RescuableStorage storage rs = rescuableStorage();
+        RescueRequest storage req = rs.rescueRequests[token];
         
         // Ensure the rescue request exists
         if (req.timestamp == 0) {
@@ -148,8 +160,8 @@ library LibRescuable {
         }
         
         // Check if the rescue is unlocked and valid
-        uint256 unlockTime = req.timestamp + RESCUE_TIMELOCK;
-        uint256 expiryTime = unlockTime + RESCUE_VALIDITY;
+        uint256 unlockTime = req.timestamp + rs.rescueTimelock;
+        uint256 expiryTime = unlockTime + rs.rescueValidity;
         
         if (block.timestamp < unlockTime) {
             revert Errors.RescueStillLocked(); // Still locked
@@ -161,9 +173,9 @@ library LibRescuable {
         
         // Store details before deletion
         address receiver = req.receiver;
-        
+
         // Clear the rescue request first to prevent reentrancy
-        delete rescuableStorage().rescueRequests[token];
+        delete rs.rescueRequests[token];
         
         // Execute the rescue
         uint256 amount;
@@ -187,7 +199,8 @@ library LibRescuable {
     /// @param token Token for which to cancel the rescue request
     /// @param caller The address attempting to cancel
     function cancelRescue(address token, address caller) internal {
-        RescueRequest storage req = rescuableStorage().rescueRequests[token];
+        RescuableStorage storage rs = rescuableStorage();
+        RescueRequest storage req = rs.rescueRequests[token];
         
         // No rescue to cancel
         if (req.timestamp == 0) {
@@ -195,16 +208,37 @@ library LibRescuable {
         }
         
         // Check permissions
-        bool isAdmin = LibAccessControl.hasRole(LibAccessControl.DEFAULT_ADMIN_ROLE, caller);
+        bool isAdmin = AC.hasRole(AC.ADMIN_ROLE, caller);
         bool isRequester = (req.receiver == caller);
-        
+
         if (!isAdmin && !isRequester) {
             revert Errors.RestrictedAccess();
         }
         
         // Clear the rescue request
-        delete rescuableStorage().rescueRequests[token];
+        delete rs.rescueRequests[token];
         
         emit Events.RescueCancelled(token, caller);
     }
-} 
+
+    /*═══════════════════════════════════════════════════════════════╗
+    ║                         INITIALIZATION                         ║
+    ╚═══════════════════════════════════════════════════════════════*/
+
+    /// @notice Initialize the rescue configuration
+    /// @param timelock The timelock for the rescue
+    /// @param validity The validity period for the rescue
+    function initialize() internal {
+        RescuableStorage storage rs = rescuableStorage();
+
+        if (rs.rescueTimelock != 0) {
+            revert Errors.AlreadyInitialized();
+        }
+
+        // Set default timelock settings
+        rs.rescueTimelock = DEFAULT_RESCUE_TIMELOCK;
+        rs.rescueValidity = DEFAULT_RESCUE_VALIDITY;
+        
+        emit Events.RescueConfigUpdated(DEFAULT_RESCUE_TIMELOCK, DEFAULT_RESCUE_VALIDITY);
+    }
+}
