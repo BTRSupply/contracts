@@ -5,9 +5,9 @@ import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {LibAccessControl as AC} from "../libraries/LibAccessControl.sol";
 import {BTRStorage as S} from "../libraries/BTRStorage.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "../libraries/BTREvents.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {EnumerableSet} from "@openzeppelin/utils/structs/EnumerableSet.sol";
 import {IERC173} from "../interfaces/IERC173.sol";
-import {AccessControlStorage, PendingAcceptance} from "../BTRTypes.sol";
+import {AccessControlStorage, PendingAcceptance, ErrorType} from "../BTRTypes.sol";
 import {PermissionedFacet} from "./abstract/PermissionedFacet.sol";
 
 /// @title AccessControlFacet
@@ -25,7 +25,7 @@ contract AccessControlFacet is PermissionedFacet, IERC173 {
   /// @notice Returns the address of the owner (ERC-173)
   /// @return owner_ of the contract (the admin role holder)
   function owner() external view override returns (address owner_) {
-    return admin();
+    return AC.admin();
   }
 
   /// @notice Transfers ownership of the contract to a new address (ERC-173)
@@ -82,7 +82,7 @@ contract AccessControlFacet is PermissionedFacet, IERC173 {
     }
     
     // Grant the keeper role instantly (no attack surface here)
-    if (acceptance.role == KEEPER_ROLE) return;
+    if (acceptance.role == AC.KEEPER_ROLE) return;
     
     (uint256 grantDelay, uint256 acceptWindow) = AC.getTimelockConfig();
     
@@ -155,7 +155,7 @@ contract AccessControlFacet is PermissionedFacet, IERC173 {
   /// @notice Sets admin role for a specific role
   /// @param role The role to set the admin for
   /// @param adminRole The admin role to set
-  function setRoleAdmin(bytes32 role, bytes32 adminRole) external onlyRole(ADMIN_ROLE) {
+  function setRoleAdmin(bytes32 role, bytes32 adminRole) external onlyAdmin {
     AC.setRoleAdmin(role, adminRole);
   }
 
@@ -165,7 +165,7 @@ contract AccessControlFacet is PermissionedFacet, IERC173 {
   function setTimelockConfig(uint256 grantDelay, uint256 acceptWindow) external onlyAdmin {
     if (grantDelay < AC.MIN_GRANT_DELAY || grantDelay > AC.MAX_GRANT_DELAY ||
         acceptWindow < AC.MIN_ACCEPT_WINDOW || acceptWindow > AC.MAX_ACCEPT_WINDOW) {
-        revert Errors.InvalidGrantDelay(grantDelay, AC.MIN_GRANT_DELAY, AC.MAX_GRANT_DELAY);
+        revert Errors.OutOfRange(grantDelay, AC.MIN_GRANT_DELAY, AC.MAX_GRANT_DELAY);
     }
     AC.setTimelockConfig(grantDelay, acceptWindow);
   }
@@ -178,7 +178,7 @@ contract AccessControlFacet is PermissionedFacet, IERC173 {
     address account
   ) external onlyRoleAdmin(role) {
     if (AC.hasRole(role, account)) {
-      revert Errors.RoleAlreadyAssigned();
+      revert Errors.AlreadyExists(ErrorType.ROLE);
     }
     AC.createRoleAcceptance(role, account, msg.sender);
   }

@@ -116,7 +116,7 @@ library LibDiamond {
             address oldFacetAddress = address(bytes20(oldFacetAndPosition));
             
             if (oldFacetAddress != address(0)) {
-                revert Errors.FunctionAlreadyExists(selector);
+                revert Errors.AlreadyExists(ErrorType.FUNCTION);
             }
             
             // Add selector with position at the end of the selectors array
@@ -159,10 +159,10 @@ library LibDiamond {
             address oldFacetAddress = address(bytes20(oldFacetAndPosition));
             
             if (oldFacetAddress == address(0)) {
-                revert Errors.FunctionDoesNotExist(selector);
+                revert Errors.NotFound(ErrorType.FUNCTION);
             }
             if (oldFacetAddress == _facetAddress) {
-                revert Errors.FunctionAlreadyOnFacet(selector);
+                revert Errors.AlreadyExists(ErrorType.FACET);
             }
             
             // Keep the same position, just update facet address
@@ -188,10 +188,10 @@ library LibDiamond {
             address oldFacetAddress = address(bytes20(oldFacetAndPosition));
             
             if (oldFacetAddress == address(0)) {
-                revert Errors.FunctionDoesNotExist(selector);
+                revert Errors.NotFound(ErrorType.FUNCTION);
             }
             if (checkFacetAddress && oldFacetAddress != _facetAddress) {
-                revert Errors.FunctionNotFoundOnFacet(selector, _facetAddress);
+                revert Errors.NotFound(ErrorType.FACET);
             }
             
             // Get position in the selectors array
@@ -267,7 +267,7 @@ library LibDiamond {
                     revert(add(32, error), returndata_size)
                 }
             } else {
-                revert Errors.InitFunctionReverted(_init);
+                revert Errors.Failed(ErrorType.FUNCTION);
             }
         }
     }

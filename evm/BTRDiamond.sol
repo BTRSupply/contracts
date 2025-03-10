@@ -7,14 +7,17 @@ import {LibAccessControl} from "./libraries/LibAccessControl.sol";
 import {IDiamondCut} from "./interfaces/IDiamondCut.sol";
 import {IDiamondLoupe} from "./interfaces/IDiamondLoupe.sol";
 import {IERC173} from "./interfaces/IERC173.sol";
-import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {IERC165} from "@openzeppelin/interfaces/IERC165.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "./libraries/BTREvents.sol";
 import {BTRStorage as S} from "./libraries/BTRStorage.sol";
-import {DiamondStorage, AccessControlStorage} from "./BTRTypes.sol";
+import {DiamondStorage, AccessControlStorage, ErrorType} from "./BTRTypes.sol";
+import {EnumerableSet} from "@openzeppelin/utils/structs/EnumerableSet.sol";
 
 /// @title BTR Diamond Contract
 /// @dev Implementation of the Diamond Pattern (EIP-2535)
 contract BTRDiamond {
+  using EnumerableSet for EnumerableSet.AddressSet;
+
   constructor(address _owner, address _diamondCutFacet) payable {
     if (_owner == address(0)) revert Errors.ZeroOwnerAddress();
     if (_diamondCutFacet == address(0)) revert Errors.ZeroDiamondCutAddress();
@@ -26,8 +29,8 @@ contract BTRDiamond {
     AccessControlStorage storage acs = S.accessControl();
     
     // Set up ADMIN_ROLE and ADMIN_ROLE for ownership management
-    acs.roles[LibAccessControl.ADMIN_ROLE].members[_owner] = true;
-    acs.roles[LibAccessControl.ADMIN_ROLE].members[_owner] = true;
+    acs.roles[LibAccessControl.ADMIN_ROLE].members.add(_owner);
+    acs.roles[LibAccessControl.ADMIN_ROLE].members.add(_owner);
     
     // Configure admin role hierarchy
     acs.roles[LibAccessControl.ADMIN_ROLE].adminRole = LibAccessControl.ADMIN_ROLE;

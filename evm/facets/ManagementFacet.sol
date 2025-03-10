@@ -7,7 +7,7 @@ import {LibManageable} from "../libraries/LibManageable.sol";
 import "../BTRTypes.sol";
 import {BTRStorage as S} from "../libraries/BTRStorage.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "../libraries/BTREvents.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin/token/ERC20/IERC20.sol";
 import {ProtocolStorage} from "../BTRTypes.sol";
 import {PermissionedFacet} from "./abstract/PermissionedFacet.sol";
 

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {SafeCast} from "@openzeppelin/utils/math/SafeCast.sol";
 import {BTRStorage as S} from "./BTRStorage.sol";
 import {VaultStorage} from "../BTRTypes.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "./BTREvents.sol";
 import {Maths} from "./Maths.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin/token/ERC20/IERC20.sol";
 
 /// @title LibVaultMath
 /// @dev Combined math functions for the BTR Vault

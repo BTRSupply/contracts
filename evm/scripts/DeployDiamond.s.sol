@@ -9,9 +9,20 @@ import {BTRDiamond} from "../BTRDiamond.sol";
 import {DiamondCutFacet} from "facets/DiamondCutFacet.sol";
 import {DiamondLoupeFacet} from "facets/DiamondLoupeFacet.sol";
 import {AccessControlFacet} from "facets/AccessControlFacet.sol";
+import {PermissionedFacet} from "facets/abstract/PermissionedFacet.sol";
 import {LibAccessControl} from "libraries/LibAccessControl.sol";
 import {IERC173} from "interfaces/IERC173.sol";
-import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {IERC165} from "@openzeppelin/interfaces/IERC165.sol";
+
+// Diamond initializer contract
+contract DiamondInit {
+    /// @notice Initialize the diamond with initial settings
+    /// @param _admin Admin address
+    function init(address _admin) external {
+        // Initialize the access control
+        AccessControlFacet(address(this)).initialize(_admin);
+    }
+}
 
 /**
  * @title DeployDiamond
@@ -23,6 +34,7 @@ contract DeployDiamond is Script {
     DiamondCutFacet diamondCutFacet;
     DiamondLoupeFacet diamondLoupeFacet;
     AccessControlFacet accessControlFacet;
+    DiamondInit diamondInit;
     
     // The Diamond contract
     BTRDiamond diamond;
@@ -37,17 +49,14 @@ contract DeployDiamond is Script {
         
         vm.startBroadcast(deployerPk);
 
-        // 1. Deploy all facets
+        // 1. Deploy all facets and initializer
         deployFacets();
 
         // 2. Deploy the diamond with the DiamondCutFacet address
         diamond = new BTRDiamond(admin, address(diamondCutFacet));
         
-        // 3. Add remaining facets to the diamond
-        addFacets();
-        
-        // 4. Initialize facets
-        initializeFacets(admin);
+        // 3. Add remaining facets to the diamond and initialize
+        addFacetsAndInitialize(admin);
         
         vm.stopBroadcast();
         
@@ -68,13 +77,15 @@ contract DeployDiamond is Script {
         diamondCutFacet = new DiamondCutFacet();
         diamondLoupeFacet = new DiamondLoupeFacet();
         accessControlFacet = new AccessControlFacet();
+        diamondInit = new DiamondInit();
         console2.log("Facets deployed successfully");
     }
 
     /**
-     * @notice Add facets to the diamond using diamondCut
+     * @notice Add facets to the diamond using diamondCut and initialize
+     * @param admin Admin address for initialization
      */
-    function addFacets() internal {
+    function addFacetsAndInitialize(address admin) internal {
         // Prepare facet cuts for diamond cut
         IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](2);
         
@@ -93,23 +104,11 @@ contract DeployDiamond is Script {
         });
         
         // Execute the diamond cut through the diamond contract
-        IDiamondCut(address(diamond)).diamondCut(cuts, address(0), "");
+        // and initialize in the same transaction
+        bytes memory calldata_ = abi.encodeWithSelector(DiamondInit.init.selector, admin);
+        IDiamondCut(address(diamond)).diamondCut(cuts, address(diamondInit), calldata_);
         
-        console2.log("Facets added to diamond successfully");
-    }
-    
-    /**
-     * @notice Initialize facets with required configuration
-     * @param admin The address of the admin
-     */
-    function initializeFacets(address admin) internal {
-        // Initialize AccessControl facet
-        (bool success,) = address(diamond).call(
-            abi.encodeWithSelector(AccessControlFacet.initialize.selector, admin)
-        );
-        require(success, "AccessControl initialization failed");
-
-        console2.log("Facets initialized successfully");
+        console2.log("Facets added to diamond and initialized successfully");
     }
     
     /**
@@ -134,7 +133,7 @@ contract DeployDiamond is Script {
      */
     function generateAccessControlSelectors() internal pure returns (bytes4[] memory) {
         // Create an array with all AccessControlFacet function selectors
-        bytes4[] memory selectors = new bytes4[](19);
+        bytes4[] memory selectors = new bytes4[](25);
         
         // ERC173 compatibility functions
         selectors[0] = IERC173.owner.selector;
@@ -156,12 +155,17 @@ contract DeployDiamond is Script {
         selectors[14] = AccessControlFacet.renounceRole.selector;
         selectors[15] = AccessControlFacet.acceptRole.selector;
         selectors[16] = AccessControlFacet.cancelRoleGrant.selector;
+        selectors[17] = AccessControlFacet.checkRoleAcceptance.selector;
         
-        // There is a second initialize function in AccessControlFacet (this might be a duplicate)
-        selectors[17] = bytes4(keccak256("initialize(address)"));
-        
-        // Additional function for role-based check
-        selectors[18] = AccessControlFacet.checkRoleAcceptance.selector;
+        // Methods from PermissionedFacet
+        selectors[18] = PermissionedFacet.hasRole.selector;
+        // Using function signatures for overloaded functions
+        selectors[19] = bytes4(keccak256("checkRole(bytes32)"));
+        selectors[20] = bytes4(keccak256("checkRole(bytes32,address)"));
+        selectors[21] = PermissionedFacet.isAdmin.selector;
+        selectors[22] = PermissionedFacet.isManager.selector;
+        selectors[23] = PermissionedFacet.isKeeper.selector;
+        selectors[24] = PermissionedFacet.isTreasury.selector;
         
         return selectors;
     }

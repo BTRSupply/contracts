@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {IDiamondLoupe} from "../interfaces/IDiamondLoupe.sol";
-import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {IERC165} from "@openzeppelin/interfaces/IERC165.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "../libraries/BTREvents.sol";
 import {BTRStorage as S} from "../libraries/BTRStorage.sol";
 import {DiamondStorage} from "../BTRTypes.sol";

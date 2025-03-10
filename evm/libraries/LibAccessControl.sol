@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {BTRStorage as S} from "./BTRStorage.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "./BTREvents.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {EnumerableSet} from "@openzeppelin/utils/structs/EnumerableSet.sol";
 import {AccessControlStorage, RoleData, PendingAcceptance, ErrorType} from "../BTRTypes.sol";
 
 /// @title LibAccessControl
@@ -296,9 +296,9 @@ library LibAccessControl {
     ╚═══════════════════════════════════════════════════════════════*/
 
     /// @notice Initialize the access control system
-    /// @param admin The initial admin address
-    function initialize(address admin) internal {
-        if (admin == address(0)) {
+    /// @param adminAddress The initial admin address
+    function initialize(address adminAddress) internal {
+        if (adminAddress == address(0)) {
             revert Errors.ZeroAddress();
         }
 
@@ -308,8 +308,8 @@ library LibAccessControl {
         }
 
         // Grant initial roles
-        grantRole(ADMIN_ROLE, admin);
-        grantRole(MANAGER_ROLE, admin);
+        grantRole(ADMIN_ROLE, adminAddress);
+        grantRole(MANAGER_ROLE, adminAddress);
 
         // Set up role admins
         setRoleAdmin(KEEPER_ROLE, ADMIN_ROLE);

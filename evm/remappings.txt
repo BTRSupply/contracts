@@ -1,5 +1,5 @@
-@openzeppelin/contracts/=libraries/openzeppelin/
-@openzeppelin/contracts-upgradeable/=libraries/openzeppelin-upgradeable/
+@openzeppelin/=libraries/openzeppelin/
+@openzeppelin-upgradeable/=libraries/openzeppelin-upgradeable/
 forge-std/=libraries/forge-std/src/
 libraries/=libraries/
 interfaces/=interfaces/

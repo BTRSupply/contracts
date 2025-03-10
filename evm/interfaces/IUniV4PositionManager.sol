@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IUniV4PoolManager} from "./IUniV4PoolManager.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {IERC20Metadata} from "@openzeppelin/token/ERC20/extensions/IERC20Metadata.sol";
 import {IUniV4ERC721PermitV4} from "./IUniV4Utils.sol";
 
 // Removed IERC20Metadata from inheritance to avoid conflicts with IERC721
