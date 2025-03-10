@@ -1,2 +1,0 @@
-@openzeppelin/contracts/=evm/libraries/openzeppelin/
-@openzeppelin/contracts-upgradeable/=evm/libraries/openzeppelin-upgradeable/

@@ -78,7 +78,7 @@ contract AccessControlFacet is PermissionedFacet, IERC173 {
   ) public view {
     // Make sure the role accepted is the same as the pending one
     if (acceptance.role != role) {
-      revert Errors.Unauthorized();
+      revert Errors.Unauthorized(ErrorType.ROLE);
     }
     
     // Grant the keeper role instantly (no attack surface here)
@@ -90,12 +90,12 @@ contract AccessControlFacet is PermissionedFacet, IERC173 {
     if (
       block.timestamp > (acceptance.timestamp + grantDelay + acceptWindow)
     ) {
-      revert Errors.AcceptanceExpired();
+      revert Errors.Expired(ErrorType.ACCEPTANCE);
     }
     
     // Check timelock
     if (block.timestamp < (acceptance.timestamp + grantDelay)) {
-      revert Errors.AcceptanceLocked();
+      revert Errors.Locked();
     }
   }
 
@@ -144,8 +144,8 @@ contract AccessControlFacet is PermissionedFacet, IERC173 {
 
   /// @notice Initialize the access control with default roles
   /// @param initialAdmin The initial admin address
-  function initialize(address admin) external {
-    AC.initialize(admin);
+  function initialize(address initialAdmin) external {
+    AC.initialize(initialAdmin);
   }
 
   /*═══════════════════════════════════════════════════════════════╗

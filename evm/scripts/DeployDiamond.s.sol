@@ -3,28 +3,26 @@ pragma solidity 0.8.28;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
-import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
-import {IDiamondLoupe} from "../interfaces/IDiamondLoupe.sol";
+import {IDiamondCut} from "interfaces/IDiamondCut.sol";
+import {IDiamondLoupe} from "interfaces/IDiamondLoupe.sol";
 import {BTRDiamond} from "../BTRDiamond.sol";
-import {DiamondCutFacet} from "../facets/DiamondCutFacet.sol";
-import {DiamondLoupeFacet} from "../facets/DiamondLoupeFacet.sol";
-import {AccessControlFacet} from "../facets/AccessControlFacet.sol";
-import {RescuableFacet} from "../facets/RescuableFacet.sol";
-import {LibAccessControl} from "../libraries/LibAccessControl.sol";
-import {IERC173} from "../interfaces/IERC173.sol";
+import {DiamondCutFacet} from "facets/DiamondCutFacet.sol";
+import {DiamondLoupeFacet} from "facets/DiamondLoupeFacet.sol";
+import {AccessControlFacet} from "facets/AccessControlFacet.sol";
+import {LibAccessControl} from "libraries/LibAccessControl.sol";
+import {IERC173} from "interfaces/IERC173.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 
 /**
- * @title DeployBTRDiamond
+ * @title DeployDiamond
  * @notice Forge script to deploy BTR Diamond architecture
- * @dev This script replaces the functionality of BTRVaultInit.sol with a proper deployment script
+ * @dev This script replaces the functionality of BTRVaultInit.sol
  */
-contract DeployBTRDiamond is Script {
+contract DeployDiamond is Script {
     // Facet contracts
     DiamondCutFacet diamondCutFacet;
     DiamondLoupeFacet diamondLoupeFacet;
     AccessControlFacet accessControlFacet;
-    RescuableFacet rescuableFacet;
     
     // The Diamond contract
     BTRDiamond diamond;
@@ -35,7 +33,7 @@ contract DeployBTRDiamond is Script {
         address deployer = vm.addr(deployerPk);
         address admin = deployer;
         
-        console2.log("Deploying BTR Diamond with deployer:", admin);
+        console2.log("Deploying BTR Diamond with admin:", admin);
         
         vm.startBroadcast(deployerPk);
 
@@ -59,7 +57,6 @@ contract DeployBTRDiamond is Script {
         console2.log("DiamondCutFacet address:  ", address(diamondCutFacet));
         console2.log("DiamondLoupeFacet address:", address(diamondLoupeFacet));
         console2.log("AccessControlFacet address:", address(accessControlFacet));
-        console2.log("RescuableFacet address:   ", address(rescuableFacet));
         console2.log("Admin address:            ", admin);
         console2.log("=========================================");
     }
@@ -71,7 +68,6 @@ contract DeployBTRDiamond is Script {
         diamondCutFacet = new DiamondCutFacet();
         diamondLoupeFacet = new DiamondLoupeFacet();
         accessControlFacet = new AccessControlFacet();
-        rescuableFacet = new RescuableFacet();
         console2.log("Facets deployed successfully");
     }
 
@@ -80,7 +76,7 @@ contract DeployBTRDiamond is Script {
      */
     function addFacets() internal {
         // Prepare facet cuts for diamond cut
-        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](3);
+        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](2);
         
         // Diamond Loupe facet
         cuts[0] = IDiamondCut.FacetCut({
@@ -96,13 +92,6 @@ contract DeployBTRDiamond is Script {
             functionSelectors: generateAccessControlSelectors()
         });
         
-        // Rescuable facet
-        cuts[2] = IDiamondCut.FacetCut({
-            facetAddress: address(rescuableFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: generateRescuableSelectors()
-        });
-        
         // Execute the diamond cut through the diamond contract
         IDiamondCut(address(diamond)).diamondCut(cuts, address(0), "");
         
@@ -111,7 +100,7 @@ contract DeployBTRDiamond is Script {
     
     /**
      * @notice Initialize facets with required configuration
-     * @param admin The address of the deployer/admin
+     * @param admin The address of the admin
      */
     function initializeFacets(address admin) internal {
         // Initialize AccessControl facet
@@ -119,12 +108,6 @@ contract DeployBTRDiamond is Script {
             abi.encodeWithSelector(AccessControlFacet.initialize.selector, admin)
         );
         require(success, "AccessControl initialization failed");
-
-        // Initialize Rescuable facet
-        (success,) = address(diamond).call(
-            abi.encodeWithSelector(RescuableFacet.initialize.selector)
-        );
-        require(success, "Rescuable initialization failed");
 
         console2.log("Facets initialized successfully");
     }
@@ -174,34 +157,11 @@ contract DeployBTRDiamond is Script {
         selectors[15] = AccessControlFacet.acceptRole.selector;
         selectors[16] = AccessControlFacet.cancelRoleGrant.selector;
         
-        // There is a second initialize function in AccessControlFacet, this might be a duplicate
+        // There is a second initialize function in AccessControlFacet (this might be a duplicate)
         selectors[17] = bytes4(keccak256("initialize(address)"));
         
         // Additional function for role-based check
         selectors[18] = AccessControlFacet.checkRoleAcceptance.selector;
-        
-        return selectors;
-    }
-    
-    /**
-     * @notice Generate function selectors for RescuableFacet
-     * @return selectors Array of function selectors
-     */
-    function generateRescuableSelectors() internal pure returns (bytes4[] memory) {
-        bytes4[] memory selectors = new bytes4[](9);
-        
-        // View functions
-        selectors[0] = RescuableFacet.getRescueRequest.selector;
-        selectors[1] = RescuableFacet.isRescueLocked.selector;
-        selectors[2] = RescuableFacet.isRescueExpired.selector;
-        selectors[3] = RescuableFacet.isRescueUnlocked.selector;
-        selectors[4] = RescuableFacet.getRescueConfig.selector;
-        
-        // Action functions
-        selectors[5] = RescuableFacet.setRescueConfig.selector;
-        selectors[6] = RescuableFacet.requestRescue.selector;
-        selectors[7] = RescuableFacet.executeRescue.selector;
-        selectors[8] = RescuableFacet.cancelRescue.selector;
         
         return selectors;
     }

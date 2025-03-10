@@ -1,10 +1,13 @@
 # Dependency directories
 evm/libraries/openzeppelin/
 evm/libraries/openzeppelin-upgradeable/
+evm/libraries/forge-std/
 
 # Foundry output
 out/
 cache/
+**/out/
+**/cache/
 
 # Legacy code
 evm-legacy/

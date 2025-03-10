@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {BTRStorage as S} from "./BTRStorage.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "./BTREvents.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {AccessControlStorage, RoleData, PendingAcceptance} from "../BTRTypes.sol";
+import {AccessControlStorage, RoleData, PendingAcceptance, ErrorType} from "../BTRTypes.sol";
 
 /// @title LibAccessControl
 /// @notice Library to manage role-based access control
@@ -42,7 +42,7 @@ library LibAccessControl {
 
     /// @return Address of the admin
     function admin() internal view returns (address) {
-        address[] memory admins = AC.ADMIN_ROLE.getMembers();
+        address[] memory admins = getMembers(ADMIN_ROLE);
         return admins.length > 0 ? admins[0] : address(0);
     }
 
@@ -68,7 +68,7 @@ library LibAccessControl {
     /// @param account The account to check
     function checkRole(bytes32 role, address account) internal view {
         if (!hasRole(role, account)) {
-            revert Errors.Unauthorized();
+            revert Errors.Unauthorized(ErrorType.ACCESS);
         }
     }
 
@@ -132,7 +132,7 @@ library LibAccessControl {
     ) internal view {
         // Make sure the role accepted is the same as the pending one
         if (acceptance.role != role) {
-            revert Errors.Unauthorized();
+            revert Errors.Unauthorized(ErrorType.ROLE);
         }
         
         // Grant the keeper role instantly (no attack surface here)
@@ -144,12 +144,12 @@ library LibAccessControl {
         if (
             block.timestamp > (acceptance.timestamp + grantDelay + acceptWindow)
         ) {
-            revert Errors.AcceptanceExpired();
+            revert Errors.Expired(ErrorType.ACCEPTANCE);
         }
         
         // Check timelock
         if (block.timestamp < (acceptance.timestamp + grantDelay)) {
-            revert Errors.AcceptanceLocked();
+            revert Errors.Locked();
         }
     }
 
@@ -169,7 +169,7 @@ library LibAccessControl {
     /// @param adminRole The admin role to set
     function setRoleAdmin(bytes32 role, bytes32 adminRole) internal {
         if (role == ADMIN_ROLE) {
-            revert Errors.Unauthorized(); // 0x00 will always be the admin's admin role (top of the hierarchy)
+            revert Errors.Unauthorized(ErrorType.ADMIN); // 0x00 will always be the admin's admin role (top of the hierarchy)
         }
 
         AccessControlStorage storage acs = S.accessControl();
@@ -247,10 +247,10 @@ library LibAccessControl {
         if (!hasRole(ADMIN_ROLE, msg.sender) && 
             !hasRole(getRoleAdmin(acceptance.role), msg.sender) &&
             msg.sender != account) {
-            revert Errors.Unauthorized();
+            revert Errors.Unauthorized(ErrorType.ACCESS);
         }
-
-        emit Events.RoleAcceptanceCancelled(acceptance.role, account, msg.sender);
+        
+        emit Events.RoleAcceptanceCreated(acceptance.role, address(0), account);
         delete acs.pendingAcceptance[account];
     }
 
@@ -261,30 +261,34 @@ library LibAccessControl {
         AccessControlStorage storage acs = S.accessControl();
         RoleData storage roleData = acs.roles[role];
         
-        if (!roleData.members.contains(account)) {
-            roleData.members.add(account);
-            emit Events.RoleGranted(role, account, msg.sender);
-            if (role == ADMIN_ROLE) {
-                emit Events.OwnershipTransferred(msg.sender, account);
-            }
+        if (roleData.members.contains(account)) {
+            revert Errors.AlreadyExists(ErrorType.ROLE);
+        }
+        
+        roleData.members.add(account);
+        emit Events.RoleGranted(role, account, msg.sender);
+        if (role == ADMIN_ROLE) {
+            emit Events.OwnershipTransferred(msg.sender, account);
         }
     }
 
     /// @notice Revoke a role from an account
     /// @param role The role to revoke
-    /// @param account The account to revoke from 
+    /// @param account The account to revoke from
     function revokeRole(bytes32 role, address account) internal {
         if (role == ADMIN_ROLE) {
-            revert Errors.AdminRoleRevocation(); // Admin role can't be revoked as it would brick the contract
+            revert Errors.Unauthorized(ErrorType.ADMIN); // Admin role can't be revoked as it would brick the contract
         }
-
+        
+        if (!hasRole(role, account)) {
+            revert Errors.NotFound(ErrorType.ROLE);
+        }
+        
         AccessControlStorage storage acs = S.accessControl();
         RoleData storage roleData = acs.roles[role];
         
-        if (roleData.members.contains(account)) {
-            roleData.members.remove(account);
-            emit Events.RoleRevoked(role, account, msg.sender);
-        }
+        roleData.members.remove(account);
+        emit Events.RoleRevoked(role, account, msg.sender);
     }
 
     /*═══════════════════════════════════════════════════════════════╗

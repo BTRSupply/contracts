@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
 import {BTRStorage as S} from "./BTRStorage.sol";
 import {DiamondStorage} from "../BTRTypes.sol";
+import {ErrorType} from "../BTRTypes.sol";
 import {LibAccessControl} from "./LibAccessControl.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "./BTREvents.sol";
 
@@ -88,7 +89,7 @@ library LibDiamond {
 
     function addFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
         if (_functionSelectors.length == 0) {
-            revert Errors.NoSelectorsInFacet();
+            revert Errors.NotFound(ErrorType.SELECTOR);
         }
         if (_facetAddress == address(0)) {
             revert Errors.ZeroAddress();
@@ -131,7 +132,7 @@ library LibDiamond {
 
     function replaceFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
         if (_functionSelectors.length == 0) {
-            revert Errors.NoSelectorsInFacet();
+            revert Errors.NotFound(ErrorType.SELECTOR);
         }
         if (_facetAddress == address(0)) {
             revert Errors.ZeroAddress();
@@ -174,7 +175,7 @@ library LibDiamond {
 
     function removeFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
         if (_functionSelectors.length == 0) {
-            revert Errors.NoSelectorsInFacet();
+            revert Errors.NotFound(ErrorType.SELECTOR);
         }
         
         DiamondStorage storage ds = S.diamond();
