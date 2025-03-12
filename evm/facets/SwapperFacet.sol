@@ -8,7 +8,9 @@ import {LibAccessControl} from "../libraries/LibAccessControl.sol";
 import {LibSwapper} from "../libraries/LibSwapper.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "../libraries/BTREvents.sol";
 import {PermissionedFacet} from "./abstract/PermissionedFacet.sol";
-import {LibRescuable} from "../libraries/LibRescuable.sol";
+import {LibRescue} from "../libraries/LibRescue.sol";
+import {LibManagement as M} from "../libraries/LibManagement.sol";
+import {AccountStatus as AS} from "../BTRTypes.sol";
 
 /// @title SwapperFacet
 /// @notice External interface for on-chain swap calldata execution
@@ -18,7 +20,7 @@ contract SwapperFacet is PermissionedFacet {
     using LibAccessControl for bytes32;
     using LibSwapper for bool;
     using LibSwapper for address;
-    using LibRescuable for address;
+    using LibRescue for address;
 
     /*═══════════════════════════════════════════════════════════════╗
     ║                       CONFIGURATION                            ║
@@ -33,7 +35,14 @@ contract SwapperFacet is PermissionedFacet {
         bool _restrictRouter,
         bool _approveMax
     ) external onlyAdmin {
-        LibSwapper.initializeSwapper(_restrictCaller, _restrictRouter, _approveMax);
+        uint256 restrictions = 0;
+        if (_restrictCaller) restrictions = restrictions.setBit(LibSwapper.RESTRICT_CALLER_BIT);
+        if (_restrictRouter) restrictions = restrictions.setBit(LibSwapper.RESTRICT_ROUTER_BIT);
+        if (_approveMax) restrictions = restrictions.setBit(LibSwapper.APPROVE_MAX_BIT);
+        
+        S.protocol().swapRestrictions = restrictions;
+        
+        emit Events.SwapperInitialized(_restrictCaller, _restrictRouter, _approveMax);
     }
 
     /// @notice Sets caller restriction flag
@@ -75,13 +84,13 @@ contract SwapperFacet is PermissionedFacet {
     /// @notice Adds an address to the whitelist
     /// @param _address Address to whitelist
     function addToWhitelist(address _address) external onlyAdmin {
-        _address.addToWhitelist();
+        M.setAccountStatus(_address, AS.WHITELIST);
     }
 
     /// @notice Removes an address from the whitelist
     /// @param _address Address to remove from whitelist
     function removeFromWhitelist(address _address) external onlyAdmin {
-        _address.removeFromWhitelist();
+        M.setAccountStatus(_address, AS.NONE);
     }
 
     /*═══════════════════════════════════════════════════════════════╗
@@ -92,21 +101,23 @@ contract SwapperFacet is PermissionedFacet {
     /// @param _address Address to check
     /// @return Whether the address is whitelisted
     function isWhitelisted(address _address) external view returns (bool) {
-        return _address.isWhitelisted();
+        return M.getAccountStatus(_address) == AS.WHITELIST;
     }
 
     /// @notice Checks if a caller is restricted
     /// @param _caller Address to check
     /// @return Whether the caller is restricted
     function isCallerRestricted(address _caller) external view returns (bool) {
-        return _caller.isCallerRestricted();
+        return LibSwapper.getRestrictions().restrictCaller && 
+               M.getAccountStatus(_caller) != AS.WHITELIST;
     }
 
     /// @notice Checks if a router is restricted
     /// @param _router Address to check
     /// @return Whether the router is restricted
     function isRouterRestricted(address _router) external view returns (bool) {
-        return _router.isRouterRestricted();
+        return LibSwapper.getRestrictions().restrictRouter && 
+               M.getAccountStatus(_router) != AS.WHITELIST;
     }
 
     /// @notice Checks if an input token is restricted

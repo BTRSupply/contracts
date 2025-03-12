@@ -3,188 +3,263 @@ pragma solidity 0.8.28;
 
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {LibAccessControl} from "../libraries/LibAccessControl.sol";
-import {LibManageable} from "../libraries/LibManageable.sol";
-import "../BTRTypes.sol";
+import {LibManagement as M} from "../libraries/LibManagement.sol";
 import {BTRStorage as S} from "../libraries/BTRStorage.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "../libraries/BTREvents.sol";
-import {IERC20} from "@openzeppelin/token/ERC20/IERC20.sol";
-import {ProtocolStorage} from "../BTRTypes.sol";
+import {AccountStatus as AS, AddressType, ErrorType, Fees, ProtocolStorage, VaultStorage} from "../BTRTypes.sol";
 import {PermissionedFacet} from "./abstract/PermissionedFacet.sol";
+import {PausableFacet} from "./abstract/PausableFacet.sol";
 
-contract ManagementFacet is PermissionedFacet {
+contract ManagementFacet is PermissionedFacet, PausableFacet {
+
     /*═══════════════════════════════════════════════════════════════╗
     ║                             PAUSE                              ║
     ╚═══════════════════════════════════════════════════════════════*/
 
-    function isPaused() external view returns (bool) {
-        return LibManageable.isPaused();
-    }
-
+    // protocol level pause
     function pause() external onlyManager {
-        LibManageable.pause();
+        M.pause(0);
     }
 
     function unpause() external onlyManager {
-        LibManageable.unpause();
+        M.unpause(0);
+    }
+
+    // vault level pause
+    function pause(uint32 vaultId) external onlyManager {
+        M.pause(vaultId);
+    }
+
+    function unpause(uint32 vaultId) external onlyManager {
+        M.unpause(vaultId);
     }
 
     /*═══════════════════════════════════════════════════════════════╗
-    ║                         CONFIGURATION                          ║
+    ║                           MANAGEMENT                           ║
     ╚═══════════════════════════════════════════════════════════════*/
 
-    function setfeeBps(uint16 feeBps) external onlyManager {
-        LibManageable.setfeeBps(feeBps);
+    function getVersion() external view returns (uint8) {
+        return M.getVersion();
     }
 
-    function setRestrictedMint(address minter, bool restricted) external onlyAdmin {
-        LibManageable.setRestrictedMint(minter, restricted);
+    function setVersion(uint8 version) external onlyAdmin {
+        M.setVersion(version);
     }
 
-    function setMaxSupply(uint256 maxSupply) external onlyManager {
-        LibManageable.setMaxSupply(maxSupply);
+    function setMaxSupply(uint32 vaultId, uint256 maxSupply) external onlyManager {
+        M.setMaxSupply(vaultId, maxSupply);
     }
 
-    function setAddressType(address target, AddressType addressType) external onlyManager {
-        if (target == address(0)) {
-            revert Errors.ZeroAddress();
-        }
-        
-        ProtocolStorage storage ms = S.management();
-        ms.blacklist[target] = addressType;
-        
-        emit Events.BlacklistUpdated(target, uint8(addressType));
+    function getMaxSupply(uint32 vaultId) external view returns (uint256) {
+        return M.getMaxSupply(vaultId);
     }
 
-    function setBlacklist(address target, uint8 addressType) external onlyManager {
-        // Replace require statement with custom error
-        if (addressType > uint8(AddressType.ROUTER)) {
-            revert Errors.InvalidAddressType(addressType);
-        }
-        
-        if (target == address(0)) {
-            revert Errors.ZeroAddress();
-        }
-
-        ProtocolStorage storage ms = S.management();
-        ms.blacklist[target] = AddressType(addressType);
-        
-        emit Events.BlacklistUpdated(target, addressType);
+    function getVaultCount() external view returns (uint32) {
+        return M.getVaultCount();
     }
 
-    /// @notice Set the treasury address and grant treasury role
-    /// @param _treasury New treasury address
+    /*═══════════════════════════════════════════════════════════════╗
+    ║                            TREASURY                            ║
+    ╚═══════════════════════════════════════════════════════════════*/
+
+    // protocol level fees
+    function setFees(uint32 vaultId, Fees calldata fees) external onlyManager {
+        M.setFees(vaultId, fees);
+    }
+
+    // protocol level fees
+    function setFees(Fees calldata fees) external onlyManager {
+        M.setFees(fees);
+    }
+
+    // vault level fees
+    function getFees(uint32 vaultId) external view returns (Fees memory) {
+        return M.getFees(vaultId);
+    }
+
+    // protocol level fees
+    function getFees() external view returns (Fees memory) {
+        return M.getFees();
+    }
+
+    // vault level fees
+    function getAccruedFees(uint32 vaultId, IERC20Metadata token) external view returns (uint256) {
+        return M.getAccruedFees(vaultId, token);
+    }
+
+    // protocol level fees
+    function getAccruedFees(IERC20Metadata token) external view returns (uint256) {
+        return M.getAccruedFees(token);
+    }
+
+    function getPendingFees(IERC20Metadata token) external view returns (uint256) {
+        return M.getPendingFees(token);
+    }
+
+    function getPendingFees(uint32 vaultId, IERC20Metadata token) external view returns (uint256) {
+        return M.getPendingFees(vaultId, token);
+    }
+
     function setTreasury(address _treasury) external onlyAdmin {
-        if (_treasury == address(0)) {
-            revert Errors.InvalidTreasuryAddress();
-        }
-        
-        ProtocolStorage storage ms = S.management();
-        ms.treasury = _treasury;
-        
-        // Grant treasury role to the address
-        LibAccessControl.grantRole(LibAccessControl.TREASURY_ROLE, _treasury);
-        
-        emit Events.TreasuryUpdated(_treasury);
+        M.setTreasury(_treasury);
+    }
+
+    function getTreasury() external view returns (address) {
+        return M.getTreasury();
     }
 
     /*═══════════════════════════════════════════════════════════════╗
-    ║                             VIEWS                              ║
+    ║                       WHITELIST/BLACKLIST                      ║
     ╚═══════════════════════════════════════════════════════════════*/
+
+    // Protocol level whitelist/blacklist functions
+    function addToWhitelist(address[] calldata accounts, AddressType addressType) external onlyManager {
+        M.addToWhitelistBatch(accounts, addressType);
+    }
+
+    function addToWhitelist(address account, AddressType addressType) external onlyManager {
+        M.addToWhitelist(account, addressType);
+    }
+
+    function removeFromWhitelist(address[] calldata accounts) external onlyManager {
+        M.removeFromWhitelistBatch(accounts);
+    }
+
+    function removeFromWhitelist(address account) external onlyManager {
+        M.removeFromWhitelist(account);
+    }
+
+    function addToBlacklist(address[] calldata accounts, AddressType addressType) external onlyManager {
+        M.addToBlacklistBatch(accounts, addressType);
+    }
+
+    function addToBlacklist(address account, AddressType addressType) external onlyManager {
+        M.addToBlacklist(account, addressType);
+    }
+
+    function removeFromBlacklist(address target) external onlyManager {
+        M.removeFromBlacklist(target);
+    }
+
+    function removeFromBlacklist(address[] calldata accounts) external onlyManager {
+        M.removeFromBlacklistBatch(accounts);
+    }
+
+    function addToListBatch(uint32 vaultId, address[] calldata accounts, AS status) external onlyManager {
+        M.addToListBatch(vaultId, accounts, status);
+    }
+
+    function addToListBatch(address[] calldata accounts, AS status) external onlyManager {
+        M.addToListBatch(accounts, status);
+    }
+
+    function removeFromListBatch(address[] calldata accounts) external onlyManager {
+        M.removeFromListBatch(accounts);
+    }
+
+    function removeFromListBatch(uint32 vaultId, address[] calldata accounts) external onlyManager {
+        M.removeFromListBatch(vaultId, accounts);
+    }
+
+    // Vault level whitelist/blacklist functions
+    function isWhitelisted(uint32 vaultId, address account) external view returns (bool) {
+        return M.isWhitelisted(account, vaultId);
+    }
+
+    function isBlacklisted(uint32 vaultId, address account) external view returns (bool) {
+        return M.isBlacklisted(account, vaultId);
+    }
+
+    // Protocol level whitelist/blacklist functions
+    function isWhitelisted(address account) external view returns (bool) {
+        return M.isWhitelisted(account);
+    }
 
     function isBlacklisted(address target) external view returns (bool) {
-        return S.management().blacklist[target] != AddressType.NONE;
+        return M.isBlacklisted(target);
     }
 
-    function getAddressType(address target) external view returns (uint8) {
-        return uint8(S.management().blacklist[target]);
-    }
-
-    function getAddressTypeEnum(address target) external view returns (AddressType) {
-        return S.management().blacklist[target];
-    }
-
-    function getMaxSupply() external view returns (uint256) {
-        return LibManageable.getMaxSupply();
-    }
-
-    function isRestrictedMint() external view returns (bool) {
-        return LibManageable.isRestrictedMint();
-    }
-    
-    function isRestrictedMinter(address minter) external view returns (bool) {
-        return LibManageable.isRestrictedMinter(minter);
+    function getAccountStatus(address target) external view returns (AS) {
+        return M.getAccountStatus(target);
     }
 
     /*═══════════════════════════════════════════════════════════════╗
-    ║                        VAULT MANAGEMENT                         ║
+    ║                         RESTRICTED MINT                        ║
     ╚═══════════════════════════════════════════════════════════════*/
 
-    /// @notice Check if an account is whitelisted for a vault
-    /// @param vaultId ID of the vault
-    /// @param account Address to check
-    /// @return True if the account is whitelisted
-    function isVaultWhitelisted(uint32 vaultId, address account) external view returns (bool) {
-        if (vaultId >= S.protocol().vaultCount) revert Errors.NotFound(ErrorType.VAULT);
-        return LibManageable.isWhitelisted(vaultId, account);
+    function setProtocolRestrictedMint(bool restricted) external onlyManager {
+        M.setRestrictedMint(restricted);
     }
 
-    /// @notice Add addresses to whitelist for a vault
-    /// @param vaultId ID of the vault
-    /// @param accounts Addresses to add to whitelist
-    function addToVaultWhitelist(uint32 vaultId, address[] calldata accounts) external onlyManager {
-        if (vaultId >= S.protocol().vaultCount) revert Errors.NotFound(ErrorType.VAULT);
-        LibManageable.addToWhitelist(vaultId, accounts);
+    function isProtocolRestrictedMint() external view returns (bool) {
+        return M.isRestrictedMint(0);
     }
 
-    /// @notice Remove addresses from whitelist for a vault
-    /// @param vaultId ID of the vault
-    /// @param accounts Addresses to remove from whitelist
-    function removeFromVaultWhitelist(uint32 vaultId, address[] calldata accounts) external onlyManager {
-        if (vaultId >= S.protocol().vaultCount) revert Errors.NotFound(ErrorType.VAULT);
-        LibManageable.removeFromWhitelist(vaultId, accounts);
+    function setRestrictedMint(uint32 vaultId, bool restricted) external onlyManager {
+        M.setRestrictedMint(vaultId, restricted);
     }
 
-    /// @notice Set restricted mint status for a vault
-    /// @param vaultId ID of the vault
-    /// @param restricted Whether minting should be restricted to whitelisted addresses
-    function setVaultRestrictedMint(uint32 vaultId, bool restricted) external onlyManager {
-        if (vaultId >= S.protocol().vaultCount) revert Errors.NotFound(ErrorType.VAULT);
-        LibManageable.setVaultRestrictedMint(vaultId, restricted);
+    function isRestrictedMint(uint32 vaultId) external view returns (bool) {
+        return M.isRestrictedMint(vaultId);
+    }
+    
+    function isRestrictedMinter(uint32 vaultId, address minter) external view returns (bool) {
+        return M.isRestrictedMinter(vaultId, minter);
     }
 
-    /// @notice Set fee for a vault
-    /// @param vaultId ID of the vault
-    /// @param feeBps Fee in basis points (1/100 of a percent)
-    function setVaultFee(uint32 vaultId, uint16 feeBps) external onlyManager {
-        if (vaultId >= S.protocol().vaultCount) revert Errors.NotFound(ErrorType.VAULT);
-        if (feeBps > 10000) revert Errors.Exceeds(feeBps, 10000);
-        
-        VaultStorage storage vs = S.protocol().vaults[vaultId];
-        vs.feeBps = feeBps;
-        emit Events.FeeUpdated(vaultId, feeBps);
+    /*═══════════════════════════════════════════════════════════════╗
+    ║                          VAULT FEES                            ║
+    ╚═══════════════════════════════════════════════════════════════*/
+
+    function setAccountStatus(uint32 vaultId, address account, AS status) external onlyManager {
+        M.setAccountStatus(vaultId, account, status);
     }
 
-    /// @notice Get current vault count
-    /// @return Count of vaults created
-    function getVaultCount() external view returns (uint32) {
-        return S.protocol().vaultCount;
+    function setAccountStatus(address account, AS status) external onlyManager {
+        M.setAccountStatus(account, status);
     }
 
-    /// @notice Pause a specific vault
-    /// @param vaultId ID of the vault to pause
-    function pauseVault(uint32 vaultId) external onlyManager {
-        if (vaultId >= S.protocol().vaultCount) revert Errors.NotFound(ErrorType.VAULT);
-        VaultStorage storage vs = S.protocol().vaults[vaultId];
-        vs.paused = true;
-        emit Events.VaultPaused(vaultId);
+    function setAccountStatus(address[] calldata accounts, AS status) external onlyManager {
+        M.setAccountStatusBatch(accounts, status);
     }
 
-    /// @notice Unpause a specific vault
-    /// @param vaultId ID of the vault to unpause
-    function unpauseVault(uint32 vaultId) external onlyManager {
-        if (vaultId >= S.protocol().vaultCount) revert Errors.NotFound(ErrorType.VAULT);
-        VaultStorage storage vs = S.protocol().vaults[vaultId];
-        vs.paused = false;
-        emit Events.VaultUnpaused(vaultId);
+    function setAccountStatus(uint32 vaultId, address[] calldata accounts, AS status) external onlyManager {
+        M.setAccountStatusBatch(vaultId, accounts, status);
+    }
+
+    function addToWhitelist(uint32 vaultId, address account) external onlyManager {
+        M.addToWhitelist(vaultId, account);
+    }
+
+    function addToWhitelist(address account) external onlyManager {
+        M.addToWhitelist(account);
+    }
+
+    function addToWhitelistBatch(uint32 vaultId, address[] calldata accounts) external onlyManager {
+        M.addToWhitelistBatch(vaultId, accounts);
+    }
+
+    function addToWhitelistBatch(address[] calldata accounts) external onlyManager {
+        M.addToWhitelistBatch(accounts);
+    }
+
+    function addToBlacklist(uint32 vaultId, address account) external onlyManager {
+        M.addToBlacklist(vaultId, account);
+    }
+
+    function addToBlacklist(address account) external onlyManager {
+        M.addToBlacklist(account);
+    }
+
+    function addToBlacklistBatch(uint32 vaultId, address[] calldata accounts) external onlyManager {
+        M.addToBlacklistBatch(vaultId, accounts);
+    }
+
+    function addToBlacklistBatch(address[] calldata accounts) external onlyManager {
+        M.addToBlacklistBatch(accounts);
+    }
+
+    function getAccountStatus(uint32 vaultId, address account) external view returns (AS) {
+        return M.getAccountStatus(vaultId, account);
     }
 }

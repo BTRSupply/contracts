@@ -1,0 +1,16 @@
+{
+    "v1": {
+        "Tester": "0x57b3771f6b772c52e81646aa007d1ab28d91b3fe",
+        "Deployer": "0x57b3771f6b772c52e81646aa007d1ab28d91b3fe",
+        "Council": "0x57b3771f6b772c52e81646aa007d1ab28d91b3fe",
+        "Treasury": "0x57b3771f6b772c52e81646aa007d1ab28d91b3fe",
+        "CreateX": "0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed",
+        "Diamond": "",
+        "DiamondCutFacet": "",
+        "DiamondLoupeFacet": "",
+        "AccessControlFacet": "",
+        "ManagementFacet": "",
+        "SwapperFacet": "",  
+        "ALMFacet": ""
+    }
+}

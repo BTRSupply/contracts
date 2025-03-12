@@ -7,12 +7,15 @@ import {
   VaultStorage, 
   ProtocolStorage,
   SwapperStorage,
-  AddressType
+  RescueStorage,
+  AddressType,
+  AccountStatus
 } from "../BTRTypes.sol";
 
 /// @title BTR Centralized Storage
 /// @dev Contains storage accessors for BTR contract facets
 library BTRStorage {
+
   /*═══════════════════════════════════════════════════════════════╗
   ║                       STORAGE POSITIONS                        ║
   ╚═══════════════════════════════════════════════════════════════*/
@@ -23,6 +26,7 @@ library BTRStorage {
   bytes32 constant ACCESS_CONTROL_STORAGE_SLOT = keccak256("btr.access-control");
   bytes32 constant MANAGEMENT_STORAGE_SLOT = keccak256("btr.management");
   bytes32 constant SWAPPER_STORAGE_SLOT = keccak256("btr.swapper");
+  bytes32 constant RESCUE_STORAGE_SLOT = keccak256("btr.vault.rescue.storage");
 
   /*═══════════════════════════════════════════════════════════════╗
   ║                       STORAGE ACCESSORS                        ║
@@ -53,7 +57,7 @@ library BTRStorage {
   }
 
   /// @dev Access management storage
-  function management() internal pure returns (ProtocolStorage storage ms) {
+  function protocol() internal pure returns (ProtocolStorage storage ms) {
     bytes32 position = MANAGEMENT_STORAGE_SLOT;
     assembly {
       ms.slot := position
@@ -65,6 +69,14 @@ library BTRStorage {
     bytes32 position = SWAPPER_STORAGE_SLOT;
     assembly {
       ss.slot := position
+    }
+  }
+  
+  /// @dev Access rescue storage
+  function rescue() internal pure returns (RescueStorage storage rs) {
+    bytes32 position = RESCUE_STORAGE_SLOT;
+    assembly {
+      rs.slot := position
     }
   }
   

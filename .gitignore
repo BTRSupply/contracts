@@ -1,7 +1,9 @@
 # Dependency directories
-evm/libraries/openzeppelin/
-evm/libraries/openzeppelin-upgradeable/
+evm/libraries/oz/
+evm/libraries/oz-upgradeable/
 evm/libraries/forge-std/
+evm/libraries/lz-v2/
+evm/libraries/lz-devtools/
 
 # Foundry output
 out/
@@ -46,3 +48,7 @@ Cargo.lock
 **/Cargo.lock
 foundry.lock
 **/foundry.lock
+
+# Old files and folders
+*.old
+**/*.old/

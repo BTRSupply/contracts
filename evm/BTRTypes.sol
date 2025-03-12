@@ -17,9 +17,12 @@ enum AddressType {
     ROUTER   // Router blacklisted
 }
 
-/**
- * @notice Standardized error type identifiers
- */
+enum AccountStatus {
+    NONE,
+    WHITELIST,
+    BLACKLIST
+}
+
 enum ErrorType {
     CONTRACT,
     FACET,
@@ -31,6 +34,7 @@ enum ErrorType {
     ROLE,
     PROTOCOL,
     ROUTER,
+    VAULT,
     TOKEN,
     POOL,
     RANGE,
@@ -54,9 +58,9 @@ enum ErrorType {
 struct Fees {
     uint16 entry;     // Fee charged when entering the vault (minting)
     uint16 exit;      // Fee charged when exiting the vault (burning)
-    uint16 mgmt; // Ongoing management fee
-    uint16 perf; // Fee on profits
-    uint16 flash;      // Fee for flash loan operations
+    uint16 mgmt;      // Ongoing management fee
+    uint16 perf;      // Fee on profits
+    uint16 flash;     // Fee for flash loan operations
 }
 
 /*═══════════════════════════════════════════════════════════════╗
@@ -133,14 +137,6 @@ struct PendingAcceptance {
     uint64 timestamp;
 }
 
-// Access control storage
-struct AccessControlStorage {
-    mapping(bytes32 => RoleData) roles;
-    mapping(address => PendingAcceptance) pendingAcceptance;
-    uint256 grantDelay;       // Delay before a role grant can be accepted
-    uint256 acceptWindow;     // Window of time during which a role grant can be accepted
-}
-
 /*═══════════════════════════════════════════════════════════════╗
 ║                      PROTOCOL STORAGE                          ║
 ╚═══════════════════════════════════════════════════════════════*/
@@ -151,25 +147,37 @@ struct ProtocolStorage {
     uint8 version;                             // protocol version
 
     // Access control
-    mapping(address => AddressType) whitelist; // swap routers, guarded users, etc
-    mapping(address => AddressType) blacklist; // pools, tokens, users, etc
-    bool restrictedMint;                       // uses whitelist if true
-    bool paused;                               // Pause state for vault operations
+    mapping(address => AccountStatus) accountStatus; // unified status for all addresses
+    mapping(address => PendingAcceptance) pendingAcceptance;
+    mapping(bytes32 => RoleData) roles;
+    uint256 grantDelay;       // Delay before a role grant can be accepted
+    uint256 acceptWindow;     // Window of time during which a role grant can be accepted
 
-    // Protocol fees
-    Fees fees;                                // Protocol level fee configuration
+    // Restriction
+    bool entered;                              // Reentrancy guard
+    bool paused;                               // Pause state for vault operations
+    bool restrictedMint;                       // uses whitelist if true
+    // Swapper configuration
+    // Restrictions bitmask positions:
+    // 0 = restrictCaller
+    // 1 = restrictRouter
+    // 2 = restrictInput
+    // 3 = restrictOutput
+    // 4 = approveMax
+    // 5 = autoRevoke
+    uint256 swapRestrictions;                 // Bit flags for swap restrictions
+
+    // Treasury
+    Fees fees;                                 // Protocol level fee configuration
+    address treasury;                          // address to receive fees
+    mapping(IERC20Metadata => uint256) accruedFees; // accrued fees per token
+    mapping(IERC20Metadata => uint256) pendingFees; // pending fees per token
 
     // Registries
     EnumerableSet.Bytes32Set supportedDEXes;   // Set of supported DEX types
     mapping(bytes32 => PoolInfo) poolInfo;     // Pool info by poolId
     mapping(uint32 => VaultStorage) vaults;    // Vaults by id
-    uint32 vaultCount;                          // Number of vaults
-
-    // Fee management / Tokenomics
-    address treasury;                          // address to receive fees
-    address counsel;                           // multisig should match with admin[0] acs
-    mapping(IERC20Metadata => uint256) accruedFees; // accrued fees per token
-    mapping(IERC20Metadata => uint256) pendingFees; // pending fees per token
+    uint32 vaultCount;                         // Number of vaults
 }
 
 /*═══════════════════════════════════════════════════════════════╗
@@ -185,20 +193,19 @@ struct VaultStorage {
     string name;
     string symbol;
     uint8 decimals;
-    
+
     // Vault tokens
     IERC20Metadata asset;     // Primary asset - same as tokens[0] for ERC4626 compatibility
     IERC20Metadata[] tokens;  // Array of tokens managed by the vault (tokens[0], tokens[1], etc.)
     uint256 totalSupply;
     mapping(address => uint256) balances;
     mapping(address => mapping(address => uint256)) allowances;
+    mapping(address => AccountStatus) accountStatus; // replaces whitelist/blacklist mappings
 
     // Vault positions
     Range[] ranges;
 
     // Pool management
-    mapping(bytes32 => PoolInfo) poolInfo;               // Pool info by poolId
-    mapping(address => AddressType) whitelist;           // Allowed addresses (if restrictedMint is true) and pools
 
     // Fee management
     Fees fees;                                          // Fee configuration
@@ -219,25 +226,6 @@ struct VaultStorage {
     uint256 reentrancyStatus;                            // 0: not entered, 1: entered
 }
 
-/*═══════════════════════════════════════════════════════════════╗
-║                       SWAPPER STORAGE                          ║
-╚═══════════════════════════════════════════════════════════════*/
-
-// Swapper-specific storage
-struct SwapperStorage {
-    // Restrictions bitmask positions:
-    // 0 = restrictCaller
-    // 1 = restrictRouter
-    // 2 = restrictInput
-    // 3 = restrictOutput
-    // 4 = approveMax
-    // 5 = autoRevoke
-    uint256 restrictions;
-    
-    // Whitelist for callers, routers, and tokens
-    mapping(address => bool) whitelist;
-}
-
 // Vault initialization parameters
 struct VaultInitParams {
     string name;                 // Vault name
@@ -248,4 +236,31 @@ struct VaultInitParams {
     uint256 initialToken1Amount; // Initial amount for token1
     Fees fees;                   // Fee configuration for the vault
     uint256 maxSupply;           // Maximum supply of vault shares
+}
+
+/*═══════════════════════════════════════════════════════════════╗
+║                       RESCUE STORAGE                           ║
+╚═══════════════════════════════════════════════════════════════*/
+
+// Token type bits for rescue operations
+enum TokenType {
+    NATIVE,      // 0: Native ETH
+    ERC20,       // 1: Standard ERC20 tokens (including ERC777, ERC3643, ERC4626, ERC7540)
+    ERC721,      // 2: NFTs (ERC721)
+    ERC1155      // 3: Multi-token standard (ERC1155)
+}
+
+// Request for rescuing stuck tokens
+struct RescueRequest {
+    uint64 timestamp;        // When the rescue was requested
+    address receiver;        // Address to receive the rescued tokens
+    uint8 tokenType;         // Type of token (bitmask of TokenType enum)
+    bytes32[] tokens;        // For ERC20: token addresses; For ERC721/ERC1155: token IDs (encoded as bytes32)
+}
+
+// Storage for rescue operations
+struct RescueStorage {
+    mapping(address => mapping(TokenType => RescueRequest)) rescueRequests;
+    uint64 rescueTimelock;                             // Delay before rescue can be executed
+    uint64 rescueValidity;                             // Time window for executing rescue after unlock
 }

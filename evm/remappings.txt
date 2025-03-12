@@ -1,6 +1,12 @@
-@openzeppelin/=libraries/openzeppelin/
-@openzeppelin-upgradeable/=libraries/openzeppelin-upgradeable/
 forge-std/=libraries/forge-std/src/
-libraries/=libraries/
-interfaces/=interfaces/
-facets/=facets/
+
+@openzeppelin/=libraries/oz/
+@openzeppelin-upgradeable/=libraries/oz-upgradeable/
+@layerzerolabs/oft-evm/=libraries/lz-devtools/packages/oft-evm/
+@layerzerolabs/oapp-evm/=libraries/lz-devtools/packages/oapp-evm/
+@libraries/=libraries/
+@interfaces/=interfaces/
+@facets/=facets/
+@bridges/=facets/adapters/bridges/
+@dexs/=facets/adapters/dexs/
+@oracles/=facets/adapters/oracles/

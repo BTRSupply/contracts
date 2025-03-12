@@ -80,7 +80,7 @@ contract ALMFacet is ERC1155VaultsFacet {
         uint32 vaultId,
         uint256 mintAmount,
         address receiver
-    ) external vaultExists(vaultId) whenVaultNotPaused(vaultId) nonReentrant returns (uint256 amount0, uint256 amount1) {
+    ) external vaultExists(vaultId) whenNotPaused(vaultId) nonReentrant returns (uint256 amount0, uint256 amount1) {
         VaultStorage storage vs = S.protocol().vaults[vaultId];
         
         if (vs.restrictedMint && !vs.whitelist[msg.sender]) revert Errors.Unauthorized(ErrorType.MINTER);
@@ -105,7 +105,7 @@ contract ALMFacet is ERC1155VaultsFacet {
         uint32 vaultId,
         uint256 burnAmount,
         address receiver
-    ) external vaultExists(vaultId) whenVaultNotPaused(vaultId) nonReentrant returns (uint256 amount0, uint256 amount1) {
+    ) external vaultExists(vaultId) whenNotPaused(vaultId) nonReentrant returns (uint256 amount0, uint256 amount1) {
         VaultStorage storage vs = S.protocol().vaults[vaultId];
         
         if (burnAmount == 0) revert Errors.ZeroValue();

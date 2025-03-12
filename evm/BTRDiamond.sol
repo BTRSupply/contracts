@@ -19,9 +19,9 @@ contract BTRDiamond {
   using EnumerableSet for EnumerableSet.AddressSet;
 
   constructor(address _owner, address _diamondCutFacet) payable {
-    if (_owner == address(0)) revert Errors.ZeroOwnerAddress();
-    if (_diamondCutFacet == address(0)) revert Errors.ZeroDiamondCutAddress();
-    
+    if (_owner == address(0)) revert Errors.ZeroAddress();
+    if (_diamondCutFacet == address(0)) revert Errors.NotFound(ErrorType.FACET);
+
     // Initialize diamond storage
     DiamondStorage storage ds = S.diamond();
     
@@ -74,6 +74,6 @@ contract BTRDiamond {
   }
 
   receive() external payable {
-    revert Errors.EthNotAccepted();
+    revert Errors.Unauthorized(ErrorType.FUNCTION);
   }
 }

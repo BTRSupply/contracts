@@ -7,3 +7,6 @@
 [submodule "lib/forge-std"]
 	path = lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "tools/createXcrunch"]
+	path = tools/createXcrunch
+	url = https://github.com/AstrolabDAO/createXcrunch
