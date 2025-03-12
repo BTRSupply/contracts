@@ -16,6 +16,7 @@ import "./facets/AccessControlFacet.sol";
  * Also implements a freeze feature managed by the MANAGER_ROLE from AccessControlFacet.
  */
 contract BTR is ERC20, ERC20Permit, ERC165, ReentrancyGuard, IERC7802, IXERC20 {
+
     // Custom Errors
     error ZeroAddress();
     error NotAuthorized();
@@ -37,7 +38,7 @@ contract BTR is ERC20, ERC20Permit, ERC165, ReentrancyGuard, IERC7802, IXERC20 {
         uint256 mintingLimit;
         uint256 mintedInPeriod;
         uint256 lastMintResetTime;
-        
+
         // Burn limits
         uint256 burningLimit;
         uint256 burnedInPeriod;
@@ -48,10 +49,10 @@ contract BTR is ERC20, ERC20Permit, ERC165, ReentrancyGuard, IERC7802, IXERC20 {
     uint256 public constant MIN_RATE_LIMIT_PERIOD = 1 days;
     uint256 public constant MAX_RATE_LIMIT_PERIOD = 365 days;
     uint256 public rateLimitPeriod = 1 days;
-    
+
     // Mapping to track approved bridges
     mapping(address => Bridge) public bridges;
-    
+
     // Freeze mapping
     mapping(address => bool) public frozen;
     
@@ -78,7 +79,7 @@ contract BTR is ERC20, ERC20Permit, ERC165, ReentrancyGuard, IERC7802, IXERC20 {
         if (!AC.isAdmin(msg.sender)) revert NotAuthorized();
         _;
     }
-    
+
     /**
      * @dev Function modifier to check if the sender is the access control proxy with MANAGER_ROLE
      */
@@ -167,11 +168,11 @@ contract BTR is ERC20, ERC20Permit, ERC165, ReentrancyGuard, IERC7802, IXERC20 {
     ) external onlyAdmin {
         // Ensure bridge exists
         if (bridge == address(0)) revert ZeroAddress();
-        
+
         // Set the limits
         bridges[bridge].mintingLimit = mintingLimit;
         bridges[bridge].burningLimit = burningLimit;
-        
+
         // Emit the standard IXERC20 event
         emit BridgeLimitsSet(mintingLimit, burningLimit, bridge);
     }

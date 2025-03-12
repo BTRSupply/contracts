@@ -17,10 +17,10 @@ contract LayerZeroAdapterFacet is OFTAdapter, PermissionedFacet {
     event TokenAddressSet(address indexed tokenAddress);
     event SendToChainCompleted(uint32 indexed destinationChainId, address indexed sender, address indexed recipient, uint256 amount);
     event ReceiveFromChainCompleted(uint32 indexed sourceChainId, address indexed recipient, uint256 amount);
-    
+
     // Constants
     uint256 private constant DEFAULT_LIMIT = type(uint256).max;
-    
+
     /**
      * @dev Initialize the LayerZero Adapter with the required parameters
      * @param _lzEndpoint The LayerZero endpoint contract address
