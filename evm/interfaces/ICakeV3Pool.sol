@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IUniV3PoolBase} from "./IUniV3Pool.sol";
+import {IUniV3PoolBase} from "@interfaces/IUniV3Pool.sol";
 
 interface ICakeV3Pool is IUniV3PoolBase {
     function lmPool() external view returns (address);

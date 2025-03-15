@@ -2,10 +2,10 @@
 pragma solidity 0.8.28;
 
 import "forge-std/Test.sol";
-import {DiamondDeployer} from "../utils/DiamondDeployer.sol";
-import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
-import {IDiamondLoupe} from "../interfaces/IDiamondLoupe.sol";
-import {DiamondLoupeFacet} from "../facets/DiamondLoupeFacet.sol";
+import {DiamondDeployer} from "@utils/DiamondDeployer.sol";
+import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
+import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
+import {DiamondLoupeFacet} from "@facets/DiamondLoupeFacet.sol";
 
 contract DiamondTest is Test {
     DiamondDeployer.Deployment deployment;
@@ -15,7 +15,7 @@ contract DiamondTest is Test {
         deployment = diamondDeployer.deployDiamond(address(this));
     }
 
-    function testAddFacet() public {
+    function testAddFacet() public view {
         // Verify facet was added correctly
         address[] memory facetAddresses = IDiamondLoupe(address(deployment.diamond)).facetAddresses();
         assertEq(facetAddresses.length, 2); // DiamondCutFacet + DiamondLoupeFacet

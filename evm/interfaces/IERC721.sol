@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IERC165} from "./IERC165.sol";
+import {IERC165} from "@interfaces/IERC165.sol";
 
 /**
  * @dev Required interface of an ERC721 compliant contract.

@@ -1,18 +1,15 @@
 # Dependency directories
-evm/libraries/oz/
-evm/libraries/oz-upgradeable/
-evm/libraries/forge-std/
-evm/libraries/lz-v2/
-evm/libraries/lz-devtools/
+evm/.deps
 
-# Foundry output
+# Output
 out/
 cache/
+dist/
+target/
 **/out/
 **/cache/
-
-# Legacy code
-evm-legacy/
+**/dist/
+**/target/
 
 # IDE files
 .vscode/
@@ -35,14 +32,6 @@ node_modules/
 broadcast/
 **/broadcast/
 
-# Target folders
-target/
-**/target/
-
-# Dist folders
-dist/
-**/dist/
-
 # Lockfiles
 Cargo.lock
 **/Cargo.lock
@@ -50,5 +39,6 @@ foundry.lock
 **/foundry.lock
 
 # Old files and folders
+arrakis-v2
 *.old
 **/*.old/

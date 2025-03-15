@@ -16,7 +16,7 @@ interface IAlgebraV3Pool {
     function liquidityCooldown() external view returns (uint32);
     function maxLiquidityPerTick() external pure returns (uint128);
     function mint(address sender, address recipient, int24 bottomTick, int24 topTick, uint128 liquidityDesired, bytes calldata data) external returns (uint256 amount0, uint256 amount1, uint128 liquidityActual);
-    function positions(bytes32) external view returns (uint128 liquidity, uint32 lastLiquidityAddTimestamp, uint256 innerFeeGrowth0Token, uint256 innerFeeGrowth1Token, uint128 fees0, uint128 fees1);
+    function positions(bytes32) external view returns (uint128 liquidity, uint32 lastLiquidityAddTimestamp, uint256 innerFeeGrowth0X128, uint256 innerFeeGrowth1X128, uint128 fees0, uint128 fees1);
     function setCommunityFee(uint16 communityFee0, uint16 communityFee1) external;
     function setIncentive(address virtualPoolAddress) external;
     function setLiquidityCooldown(uint32 newLiquidityCooldown) external;

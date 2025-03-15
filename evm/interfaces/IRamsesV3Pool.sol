@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IUniV3PoolNoObs} from "./IUniV3Pool.sol";
+import {IUniV3PoolNoObs} from "@interfaces/IUniV3Pool.sol";
 
 interface IRamsesObservable {
     function observations(uint256 index) external view returns (uint32 blockTimestamp, int56 tickCumulative, uint160 secondsPerLiquidityCumulativeX128, bool initialized, uint160 secondsPerBoostedLiquidityPeriodX128);

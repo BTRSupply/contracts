@@ -11,10 +11,10 @@ DEPS=(
   "https://github.com/foundry-rs/forge-std.git v1.9.6 false forge-std"
 )
 
-# Store root directory and create libraries dir
-ROOT_DIR=$(pwd)
-LIBS_DIR="${ROOT_DIR}/evm/libraries"
-mkdir -p ${LIBS_DIR}
+# Store root directory and create dependencies dir
+ROOT_DIR=$(cd "$(dirname "$0")"/.. && pwd)
+DEPS_DIR="${ROOT_DIR}/evm/.deps"
+mkdir -p ${DEPS_DIR}
 
 # Clone repos to temp dir
 TMP_DIR=$(mktemp -d)
@@ -26,7 +26,7 @@ for DEP in "${DEPS[@]}"; do
   SOLIDITY_ONLY=$(echo $DEP | cut -d' ' -f3)
   ALIAS=$(echo $DEP | cut -d' ' -f4)
   REPO_NAME=$(basename $URL .git)
-  TARGET_DIR="${LIBS_DIR}/${ALIAS:-$(echo $REPO_NAME | sed 's/-contracts//')}"
+  TARGET_DIR="${DEPS_DIR}/${ALIAS:-$(echo $REPO_NAME | sed 's/-contracts//')}"
   
   echo "Fetching $REPO_NAME at version $VERSION..."
   
@@ -45,6 +45,9 @@ for DEP in "${DEPS[@]}"; do
     # Remove empty directories
     find $TARGET_DIR -type d -empty -delete
   fi
+  
+  # Update import paths for OpenZeppelin contracts
+  echo "Updating import paths for $REPO_NAME..."
 done
 
 # Clean up

@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import "forge-std/Script.sol";
-import "../interfaces/ICreateX.sol";
+import "@interfaces/ICreateX.sol";
 
 /**
  * @title VerifyMinerScript
@@ -18,14 +18,19 @@ contract VerifyMinerScript is Script {
         address expectedAddress;
     }
     
-    TestCase[] public testCases = [
-        TestCase(0x8300000000000000000000000000000000000000000000000000000000000000, 0x002c0a74aDCa91f09BC1B4C4dD181377fD724604),
-        TestCase(0xcac62d0000000000000000000000000000000000000000000000000000000000, 0x00A56d359fF7458b58Df876aC1EF648C21f12124),
-        TestCase(0xa1c72d0000000000000000000000000000000000000000000000000000000000, 0x003f08fFBf7e8E91537e446E2bE19a4b0e527e5E),
-        TestCase(0x9b093d0000000000000000000000000000000000000000000000000000000000, 0x0056A093ee9f4980a31D3a9D53BDD04BD7615876)
-    ];
+    // Initialize test cases individually to avoid memory to storage copying error
+    TestCase[] public testCases;
+    
+    // Constructor to initialize test cases
+    constructor() {
+        // Add test cases one by one instead of using an array literal
+        testCases.push(TestCase(0x8300000000000000000000000000000000000000000000000000000000000000, 0x002c0a74aDCa91f09BC1B4C4dD181377fD724604));
+        testCases.push(TestCase(0xcac62d0000000000000000000000000000000000000000000000000000000000, 0x00A56d359fF7458b58Df876aC1EF648C21f12124));
+        testCases.push(TestCase(0xa1c72d0000000000000000000000000000000000000000000000000000000000, 0x003f08fFBf7e8E91537e446E2bE19a4b0e527e5E));
+        testCases.push(TestCase(0x9b093d0000000000000000000000000000000000000000000000000000000000, 0x0056A093ee9f4980a31D3a9D53BDD04BD7615876));
+    }
 
-    function runTests() public {
+    function runTests() public view {
         ICreateX createX = ICreateX(createXAddress);
         
         console.log("Using CreateX at:", createXAddress);

@@ -2,9 +2,9 @@
 pragma solidity 0.8.28;
 
 import "forge-std/Test.sol";
-import {DiamondDeployer} from "../utils/DiamondDeployer.sol";
-import {AccessControlFacet} from "../facets/AccessControlFacet.sol";
-import {LibAccessControl} from "../libraries/LibAccessControl.sol";
+import {DiamondDeployer} from "@utils/DiamondDeployer.sol";
+import {AccessControlFacet} from "@facets/AccessControlFacet.sol";
+import {LibAccessControl} from "@libraries/LibAccessControl.sol";
 
 contract AccessControlTest is Test {
     DiamondDeployer.Deployment deployment;

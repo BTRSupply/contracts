@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IUniV4PoolManager} from "./IUniV4PoolManager.sol";
-import {IERC20Metadata} from "@openzeppelin/token/ERC20/extensions/IERC20Metadata.sol";
-import {IUniV4ERC721PermitV4} from "./IUniV4Utils.sol";
+import {IUniV4PoolManager} from "@interfaces/IUniV4PoolManager.sol";
+import {IUniV4ERC721PermitV4} from "@interfaces/IUniV4Utils.sol";
 
-// Removed IERC20Metadata from inheritance to avoid conflicts with IERC721
 interface IUniV4PositionManager is IUniV4ERC721PermitV4 {
     struct PoolKey {
         address currency0;

@@ -3,10 +3,10 @@ pragma solidity 0.8.28;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
-import {ICreateX} from "../interfaces/ICreateX.sol";
-import {BTRDiamond} from "../BTRDiamond.sol";
-import {DiamondCutFacet} from "../facets/DiamondCutFacet.sol";
-import {DiamondDeployer} from "../utils/DiamondDeployer.sol";
+import {ICreateX} from "@interfaces/ICreateX.sol";
+import {BTRDiamond} from "@/BTRDiamond.sol";
+import {DiamondCutFacet} from "@facets/DiamondCutFacet.sol";
+import {DiamondDeployer} from "@utils/DiamondDeployer.sol";
 
 /**
  * @title DeployDeterministic

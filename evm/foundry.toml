@@ -1,7 +1,7 @@
 [profile.default]
-src = 'evm'
+src = 'src'
 out = 'out'
-libs = ['libraries']
+libs = ['.deps']
 script = 'scripts'
 test = 'tests'
 solc = "0.8.28"
@@ -14,9 +14,11 @@ bytecode_hash = "none"    # Further reduces bytecode size
 cbor_metadata = false     # Don't include CBOR metadata
 
 [profile.debug]
-src = 'evm'
-out = 'debug-out'
-libs = ['evm']
+src = 'src'
+out = 'out'
+libs = ['.deps']
 script = 'scripts'
+test = 'tests'
+solc = "0.8.28"
 optimizer = false
 verbosity = 4

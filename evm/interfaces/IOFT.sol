@@ -1,4 +1,4 @@
-import { MessagingParams, MessagingReceipt, MessagingFee } from "./ILayerZero.sol";
+import { MessagingParams, MessagingReceipt, MessagingFee } from "@interfaces/ILayerZero.sol";
 
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;

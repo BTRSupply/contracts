@@ -19,7 +19,7 @@ interface IAlgebraV4Pool {
   function mint(address leftoversRecipient, address recipient, int24 bottomTick, int24 topTick, uint128 liquidityDesired, bytes calldata data) external returns (uint256 amount0, uint256 amount1, uint128 liquidityActual);
   function nextTickGlobal() external view returns (int24);
   function plugin() external view returns (address);
-  function positions(bytes32) external view returns (uint256 liquidity, uint256 innerFeeGrowth0Token, uint256 innerFeeGrowth1Token, uint128 fees0, uint128 fees1);
+  function positions(bytes32) external view returns (uint256 liquidity, uint256 innerFeeGrowth0X128, uint256 innerFeeGrowth1X128, uint128 fees0, uint128 fees1);
   function prevTickGlobal() external view returns (int24);
   function safelyGetStateOfAMM() external view returns (uint160 sqrtPrice, int24 tick, uint16 lastFee, uint8 pluginConfig, uint128 activeLiquidity, int24 nextTick, int24 previousTick);
   function setCommunityFee(uint16 newCommunityFee) external;

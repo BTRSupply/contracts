@@ -2,10 +2,10 @@
 pragma solidity 0.8.28;
 
 import "forge-std/Test.sol";
-import {DiamondDeployer} from "../utils/DiamondDeployer.sol";
-import {BTRStorage as S} from "../libraries/BTRStorage.sol";
-import {DiamondStorage} from "../BTRTypes.sol";
-import {IDiamondLoupe} from "../interfaces/IDiamondLoupe.sol";
+import {DiamondDeployer} from "@utils/DiamondDeployer.sol";
+import {BTRStorage as S} from "@libraries/BTRStorage.sol";
+import {Diamond, FacetAddressAndPosition} from "@/BTRTypes.sol";
+import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
 
 contract StorageUpgradeTest is Test {
     DiamondDeployer.Deployment deployment;
@@ -17,29 +17,32 @@ contract StorageUpgradeTest is Test {
         deployment = diamondDeployer.deployDiamond(admin);
     }
 
-    function testDiamondStorageLayout() public {
-        DiamondStorage storage ds = S.diamond();
+    function testDiamondLayout() public view {
+        Diamond storage ds = S.diamond();
         
         // Test facet storage
         assertEq(ds.facetAddresses.length, 2); // DiamondCutFacet + DiamondLoupeFacet
-        assertTrue(ds.facetAddressPosition[address(deployment.diamondCutFacet)] == 0);
-        assertTrue(ds.facetAddressPosition[address(deployment.diamondLoupeFacet)] == 1);
+        assertTrue(ds.facetFunctionSelectors[address(deployment.diamondCutFacet)].functionSelectors.length > 0);
+        assertTrue(ds.facetFunctionSelectors[address(deployment.diamondLoupeFacet)].functionSelectors.length > 0);
         
         // Test selector storage
         bytes4[] memory selectors = IDiamondLoupe(address(deployment.diamond)).facetFunctionSelectors(address(deployment.diamondLoupeFacet));
         for (uint256 i = 0; i < selectors.length; i++) {
-            bytes32 position = ds.facetAddressAndSelectorPosition[selectors[i]];
-            address facet = address(bytes20(position));
+            FacetAddressAndPosition memory facetInfo = ds.selectorToFacetAndPosition[selectors[i]];
+            address facet = facetInfo.facetAddress;
             assertTrue(facet == address(deployment.diamondLoupeFacet));
         }
     }
 
-    function testStorageSlotCollision() public {
+    function testStorageSlotCollision() public pure {
         // Get storage slots for different storage variables
-        bytes32 diamondSlot = S.DIAMOND_STORAGE_POSITION;
-        bytes32 accessControlSlot = S.ACCESS_CONTROL_STORAGE_POSITION;
+        bytes32 diamondSlot = S.DIAMOND_NAMESPACE;
+        bytes32 coreSlot = S.CORE_NAMESPACE;
+        bytes32 rescueSlot = S.RESCUE_STORAGE_SLOT;
         
-        // Verify slots are different
-        assertTrue(diamondSlot != accessControlSlot);
+        // Ensure they are different
+        assertTrue(diamondSlot != coreSlot);
+        assertTrue(diamondSlot != rescueSlot);
+        assertTrue(coreSlot != rescueSlot);
     }
 } 

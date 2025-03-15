@@ -55,7 +55,7 @@ interface IUniV3NFPManager {
     function name() external view returns (string memory);
     function ownerOf(uint256 tokenId) external view returns (address);
     function permit(address spender, uint256 tokenId, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external payable;
-    function positions(uint256 tokenId) external view returns (uint96 nonce, address operator, address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1);
+    function positions(uint256 tokenId) external view returns (uint96 nonce, address operator, address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity, uint256 innerFeeGrowth0X128, uint256 innerFeeGrowth1X128, uint128 fees0, uint128 fees1);
     function refundETH() external payable;
     function safeTransferFrom(address from, address to, uint256 tokenId) external;
     function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) external;

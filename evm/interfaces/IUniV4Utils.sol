@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IERC721} from "@openzeppelin/token/ERC721/IERC721.sol";
-import {IERC165} from "@openzeppelin/utils/introspection/IERC165.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 interface IUniV4AllowanceTransfer {
     struct PermitDetails {

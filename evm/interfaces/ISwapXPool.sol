@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IAlgebraV4Pool} from "./IAlgebraV4Pool.sol";
+import {IAlgebraV4Pool} from "@interfaces/IAlgebraV4Pool.sol";
 
 interface ISwapXPool is IAlgebraV4Pool {
     function globalState() external view returns (

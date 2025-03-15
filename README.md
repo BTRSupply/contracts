@@ -31,7 +31,7 @@ BTRDiamond
     ├── DiamondCutFacet        // Contract upgrades
     ├── DiamondLoupeFacet      // Introspection
     ├── AccessControlFacet     // Permission management
-    ├── ERC1155VaultsFacet     // Multi-vault token operations
+    ├── ERC1155Facet     // Multi-vault token operations
     ├── ALMFacet               // Core vault operations
     ├── UniV3Facet             // Uniswap V3 position management
     ├── SwapperFacet           // Exchange routing
@@ -56,7 +56,7 @@ The diamond pattern's technical architecture:
 
 ```solidity
 // Simplified representation of storage organization
-struct ProtocolStorage {
+struct CoreStorage {
     // Version control
     uint8 version;
     
@@ -65,7 +65,7 @@ struct ProtocolStorage {
     mapping(address => AddressType) blacklist;
     
     // Vault registry
-    mapping(uint32 => VaultStorage) vaults;
+    mapping(uint32 => ALMVault) vaults;
     uint32 vaultCount;
     
     // DEX registry
@@ -73,7 +73,7 @@ struct ProtocolStorage {
     mapping(bytes32 => PoolInfo) poolInfo;
 }
 
-struct VaultStorage {
+struct ALMVault {
     uint32 id;
     IERC20Metadata[] tokens;
     uint256 totalSupply;
@@ -108,7 +108,7 @@ Rather than implementing full ERC1155, the system uses a simplified approach:
 ```solidity
 // Balances and transfer implementation
 function _transfer(uint32 vaultId, address sender, address recipient, uint256 amount) internal {
-    VaultStorage storage vs = S.protocol().vaults[vaultId];
+    ALMVault storage vs = S.registry().vaults[vaultId];
     
     // Check balance
     if (vs.balances[sender] < amount) revert Errors.Insufficient();
@@ -131,9 +131,9 @@ The system abstracts DEX interactions:
 // Simplified representation of position creation
 function createPosition(uint32 vaultId, Range memory range) external {
     // Common validation
-    if (range.dexType == DEXTypes.UNISWAP) {
+    if (range.dex == DEX.UNISWAP) {
         _createUniswapPosition(vaultId, range);
-    } else if (range.dexType == DEXTypes.CAMELOT) {
+    } else if (range.dex == DEX.CAMELOT) {
         _createCamelotPosition(vaultId, range);
     } else {
         revert Errors.UnsupportedDEX();

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IAlgebraV3Pool} from "./IAlgebraV3Pool.sol";
+import {IAlgebraV3Pool} from "@interfaces/IAlgebraV3Pool.sol";
 
 interface IThenaV3Pool is IAlgebraV3Pool {
     function globalState() external view returns (

@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import "forge-std/Test.sol";
-import "../interfaces/ICreateX.sol";
+import "@interfaces/ICreateX.sol";
 
 /**
  * @title SaltMinerTest
@@ -31,7 +31,7 @@ contract SaltMinerTest is Test {
         testCases.push(TestCase(0x9b093d0000000000000000000000000000000000000000000000000000000000, 0x0056A093ee9f4980a31D3a9D53BDD04BD7615876));
     }
 
-    function testVerifyMinedAddresses() public {
+    function testVerifyMinedAddresses() public view {
         console.log("Using CreateX at:", createXAddress);
         console.log("Using deployer:", deployer);
         console.log("Testing", testCases.length, "mined addresses");

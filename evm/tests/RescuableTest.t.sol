@@ -2,11 +2,13 @@
 pragma solidity 0.8.28;
 
 import "forge-std/Test.sol";
-import {DiamondDeployer} from "../utils/DiamondDeployer.sol";
-import {RescueFacet} from "../facets/RescueFacet.sol";
-import {LibRescue} from "../libraries/LibRescue.sol";
+import {DiamondDeployer} from "@utils/DiamondDeployer.sol";
+import {RescueFacet} from "@facets/RescueFacet.sol";
+import {LibRescue} from "@libraries/LibRescue.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
+import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
+import {TokenType, ErrorType} from "@/BTRTypes.sol";
+import {BTRErrors as Errors} from "@libraries/BTREvents.sol";
 
 contract RescueTest is Test {
     DiamondDeployer.Deployment deployment;
@@ -25,16 +27,15 @@ contract RescueTest is Test {
 
         // Add RescueFacet
         RescueFacet rescueFacet = new RescueFacet();
-        bytes4[] memory selectors = new bytes4[](2);
-        selectors = new bytes4[](7);
+        bytes4[] memory selectors = new bytes4[](10);
         selectors[0] = RescueFacet.getRescueRequest.selector;
         selectors[1] = RescueFacet.isRescueLocked.selector;
         selectors[2] = RescueFacet.isRescueExpired.selector;
         selectors[3] = RescueFacet.isRescueUnlocked.selector;
         selectors[4] = RescueFacet.getRescueConfig.selector;
         selectors[5] = RescueFacet.setRescueConfig.selector;
-        selectors[6] = RescueFacet.requestRescue.selector;
-        selectors[7] = RescueFacet.executeRescue.selector;
+        selectors[6] = RescueFacet.requestRescueERC20.selector;
+        selectors[7] = RescueFacet.rescue.selector;
         selectors[8] = RescueFacet.cancelRescue.selector;
         selectors[9] = RescueFacet.initialize.selector;
 
@@ -63,8 +64,16 @@ contract RescueTest is Test {
             abi.encode(true)
         );
 
-        // Rescue tokens
-        RescueFacet(address(deployment.diamond)).rescueTokens(token, treasury);
+        // Request rescue
+        address[] memory tokens = new address[](1);
+        tokens[0] = token;
+        RescueFacet(payable(address(deployment.diamond))).requestRescueERC20(tokens);
+        
+        // Fast forward past timelock
+        vm.warp(block.timestamp + 3 days);
+        
+        // Execute rescue
+        RescueFacet(payable(address(deployment.diamond))).rescue(admin, TokenType.ERC20);
 
         // Verify transfer was called with correct parameters
         vm.expectCall(
@@ -80,8 +89,14 @@ contract RescueTest is Test {
         // Get initial treasury balance
         uint256 initialBalance = treasury.balance;
 
-        // Rescue ETH
-        RescueFacet(address(deployment.diamond)).rescueETH(treasury);
+        // Request rescue
+        RescueFacet(payable(address(deployment.diamond))).requestRescueNative();
+        
+        // Fast forward past timelock
+        vm.warp(block.timestamp + 3 days);
+        
+        // Execute rescue
+        RescueFacet(payable(address(deployment.diamond))).rescue(admin, TokenType.NATIVE);
 
         // Verify ETH was transferred
         assertEq(treasury.balance - initialBalance, amount);
@@ -89,14 +104,17 @@ contract RescueTest is Test {
     }
 
     function testRescueTokensOnlyAdmin() public {
-        vm.expectRevert(abi.encodeWithSelector(LibRescue.NotAuthorized.selector));
+        vm.expectRevert(abi.encodeWithSelector(Errors.Unauthorized.selector, ErrorType.RESCUE));
         vm.prank(address(0x3));
-        RescueFacet(address(deployment.diamond)).rescueTokens(token, treasury);
+        
+        address[] memory tokens = new address[](1);
+        tokens[0] = token;
+        RescueFacet(payable(address(deployment.diamond))).requestRescueERC20(tokens);
     }
 
     function testRescueETHOnlyAdmin() public {
-        vm.expectRevert(abi.encodeWithSelector(LibRescue.NotAuthorized.selector));
+        vm.expectRevert(abi.encodeWithSelector(Errors.Unauthorized.selector, ErrorType.RESCUE));
         vm.prank(address(0x3));
-        RescueFacet(address(deployment.diamond)).rescueETH(treasury);
+        RescueFacet(payable(address(deployment.diamond))).requestRescueNative();
     }
 } 

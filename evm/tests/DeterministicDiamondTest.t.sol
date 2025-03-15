@@ -2,15 +2,15 @@
 pragma solidity 0.8.28;
 
 import "forge-std/Test.sol";
-import {ICreateX} from "../interfaces/ICreateX.sol";
-import {IDiamondLoupe} from "../interfaces/IDiamondLoupe.sol";
-import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
-import {AccessControlFacet} from "../facets/AccessControlFacet.sol";
-import {LibAccessControl} from "../libraries/LibAccessControl.sol";
-import {DiamondCutFacet} from "../facets/DiamondCutFacet.sol";
-import {DiamondLoupeFacet} from "../facets/DiamondLoupeFacet.sol";
-import {BTRDiamond} from "../BTRDiamond.sol";
-import {DiamondDeployer} from "../utils/DiamondDeployer.sol";
+import {ICreateX} from "@interfaces/ICreateX.sol";
+import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
+import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
+import {AccessControlFacet} from "@facets/AccessControlFacet.sol";
+import {LibAccessControl} from "@libraries/LibAccessControl.sol";
+import {DiamondCutFacet} from "@facets/DiamondCutFacet.sol";
+import {DiamondLoupeFacet} from "@facets/DiamondLoupeFacet.sol";
+import {BTRDiamond} from "@/BTRDiamond.sol";
+import {DiamondDeployer} from "@utils/DiamondDeployer.sol";
 
 contract DeterministicDiamondTest is Test {
     // CreateX contract on mainnet
@@ -70,7 +70,7 @@ contract DeterministicDiamondTest is Test {
         console.log("Actual DiamondInit address:", deployed.diamondInit);
     }
 
-    function testDeterministicAddresses() public {
+    function testDeterministicAddresses() public view {
         // Test that predicted addresses match actual addresses
         DiamondDeployer.DeploymentAddresses memory predicted = deployer.predictDeterministicAddresses(
             FACET_SALT_PREFIX,
@@ -85,7 +85,7 @@ contract DeterministicDiamondTest is Test {
         assertEq(address(accessControlFacet), predicted.accessControlFacet, "AccessControlFacet address mismatch");
     }
 
-    function testCustomSalts() public {
+    function testCustomSalts() public view {
         // Create custom salts
         DiamondDeployer.Salts memory customSalts;
         customSalts.diamond = keccak256(abi.encodePacked("custom.diamond"));
@@ -113,7 +113,7 @@ contract DeterministicDiamondTest is Test {
         assertTrue(predicted.diamond != address(diamond), "Custom salt should produce different diamond address");
     }
 
-    function testMixedSalts() public {
+    function testMixedSalts() public view {
         // Create mixed salts (some custom, some default)
         DiamondDeployer.Salts memory mixedSalts;
         mixedSalts.diamond = keccak256(abi.encodePacked("custom.diamond"));

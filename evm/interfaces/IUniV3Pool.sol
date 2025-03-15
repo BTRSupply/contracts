@@ -21,7 +21,7 @@ interface IUniV3PoolNoObs {
     function liquidity() external view returns (uint128);
     function maxLiquidityPerTick() external view returns (uint128);
     function mint(address recipient, int24 tickLower, int24 tickUpper, uint128 amount, bytes calldata data) external returns (uint256 amount0, uint256 amount1);
-    function positions(bytes32 key) external view returns (uint128 liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1);
+    function positions(bytes32 key) external view returns (uint128 liquidity, uint256 innerFeeGrowth0X128, uint256 innerFeeGrowth1X128, uint128 fees0, uint128 fees1);
     function protocolFees() external view returns (uint128 token0, uint128 token1);
     function setFeeProtocol(uint8 feeProtocol0, uint8 feeProtocol1) external;
     function swap(address recipient, bool zeroForOne, int256 amountSpecified, uint160 sqrtPriceLimitX96, bytes calldata data) external returns (int256 amount0, int256 amount1);

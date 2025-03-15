@@ -1,0 +1,115 @@
+defaults:
+  licence: MIT
+  author: BTR Team
+  sol_version: 0.8.28
+  title: 
+  short_desc: 
+  desc: 
+  dev_comment: 
+
+evm:
+  interfaces: {}
+  src:
+    facets:
+      abstract:
+        PausableFacet.sol:
+          title: Pausable
+          short_desc: Emergency pause functionality
+          desc: Provides emergency stop mechanism for protocol operations
+          dev_comment: Inherits from OpenZeppelin Pausable with diamond storage pattern
+        DEXAdapter.sol:
+          title: DEX Adapter
+          short_desc: Base contract for DEX integrations
+          desc: Abstract base contract for decentralized exchange integrations
+          dev_comment: Implements common DEX interface and safety checks
+        RestrictedFacet.sol:
+          title: Restricted Functions
+          short_desc: Access-controlled operations
+          desc: Contains permissioned protocol administration functions
+          dev_comment: Integrates with AccessControlFacet for permissions
+      DiamondCutFacet.sol:
+        title: Diamond Cut
+        short_desc: Upgrade functionality
+        desc: Handles diamond proxy upgrades and facet management
+        dev_comment: Implements EIP-2535 diamond standard
+      RescueFacet.sol:
+        title: Asset Rescue
+        short_desc: Emergency asset recovery
+        desc: Allows recovery of stuck/lost assets in emergency situations
+        dev_comment: Requires multisig approval for executions
+      adapters:
+        oracles: {}
+        dexs:
+          AeroV3AdapterFacet.sol:
+            title: Aerodrome V3 Adapter
+            short_desc: Aerodrome V3 integration
+            desc: Implements Aerodrome V3 specific DEX operations
+            dev_comment: Custom math for stable/volatile pool handling
+          UniV3AdapterFacet.sol:
+            title: Uniswap V3 Adapter
+            short_desc: Uniswap V3 integration
+            desc: Implements Uniswap V3 specific DEX operations
+            dev_comment: Uses NonfungiblePositionManager for NFT positions
+          CamelotV3AdapterFacet.sol:
+            title: Camelot V3 Adapter
+            short_desc: Camelot V3 integration
+            desc: Implements Camelot V3 specific DEX operations
+            dev_comment: Handles dual farming incentives
+          VeloV3AdapterFacet.sol:
+            title: Velodrome V3 Adapter
+            short_desc: Velodrome V3 integration
+            desc: Implements Velodrome V3 specific DEX operations
+            dev_comment: Optimized for gauge system integration
+        bridges:
+          LayerZeroAdapterFacet.sol:
+            title: LayerZero Bridge
+            short_desc: Cross-chain messaging
+            desc: Handles cross-chain communications via LayerZero
+            dev_comment: Implements ULNv2 for message verification
+  tests:
+    SaltMinerTest.t.sol:
+      title: Salt Miner Test
+      short_desc: Deterministic deployment verification
+      desc: Validates CREATE2 address generation and deployment
+      dev_comment: Tests deterministic deployment logic
+    RescuableTest.t.sol:
+      title: Rescue Functions Test
+      short_desc: Asset recovery validation
+      desc: Verifies emergency asset recovery functionality
+      dev_comment: Tests multisig approval workflows
+    DiamondTest.t.sol:
+      title: Diamond Test
+      short_desc: Proxy upgrade validation
+      desc: Verifies diamond proxy functionality and facet management
+      dev_comment: Tests EIP-2535 compliance
+    DeterministicDiamondTest.t.sol:
+      title: Deterministic Diamond Test
+      short_desc: Predictable deployment verification
+      desc: Validates deterministic diamond deployment process
+      dev_comment: Tests CREATE2 address predictability
+    StorageUpgradeTest.t.sol:
+      title: Storage Upgrade Test
+      short_desc: Storage layout validation
+      desc: Verifies storage compatibility across upgrades
+      dev_comment: Tests upgrade safety checks
+    AccessControlTest.t.sol:
+      title: Access Control Test
+      short_desc: Permission validation
+      desc: Verifies role-based access control functionality
+      dev_comment: Tests permission escalation prevention
+  scripts:
+    VerifyMiner.s.sol:
+      title: Verify Miner
+      short_desc: Deployment verification
+      desc: Validates deterministic deployment parameters
+      dev_comment: Uses CREATE2 address pre-calculation
+    DeployDiamond.s.sol:
+      title: Deploy Diamond
+      short_desc: Mainnet deployment
+      desc: Handles production diamond deployment
+      dev_comment: Uses safe upgrade patterns
+    DeployDeterministic.s.sol:
+      title: Deploy Deterministic
+      short_desc: Salt-based deployment
+      desc: Manages CREATE2-based deterministic deployments
+      dev_comment: Implements salt mining logic

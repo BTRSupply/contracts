@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 // aka. IGaugeDistribution, includes IBribeDistribution
 interface IThenaV3FeeDistributor {
     function _deposit(uint256 amount, uint256 tokenId) external;
-    function _withdraw(uint256 amount, uint256 tokenId) external;
+    function _burnPosition(uint256 amount, uint256 tokenId) external;
     function getRewardForOwner(uint tokenId, address[] memory tokens) external;
     function notifyRewardAmount(address token, uint amount) external;
     function getReward(address account, address[] memory tokens) external;
