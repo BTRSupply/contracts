@@ -76,8 +76,8 @@ contract BTR is ERC20, ERC20Permit, ERC165, ReentrancyGuard, IERC7802, IXERC20 {
      * @dev Function modifier to check if the sender is the access control proxy with ADMIN_ROLE
      */
     modifier onlyAdmin() {
-        AccessControlFacet AC = AccessControlFacet(accessControl);
-        if (!AC.isAdmin(msg.sender)) revert NotAuthorized();
+        AccessControlFacet acs = AccessControlFacet(accessControl);
+        if (!acs.isAdmin(msg.sender)) revert NotAuthorized();
         _;
     }
 
@@ -85,8 +85,8 @@ contract BTR is ERC20, ERC20Permit, ERC165, ReentrancyGuard, IERC7802, IXERC20 {
      * @dev Function modifier to check if the sender is the access control proxy with MANAGER_ROLE
      */
     modifier onlyManager() {
-        AccessControlFacet AC = AccessControlFacet(accessControl);
-        if (!AC.isManager(msg.sender)) revert NotAuthorized();
+        AccessControlFacet acs = AccessControlFacet(accessControl);
+        if (!acs.isManager(msg.sender)) revert NotAuthorized();
         _;
     }
 
@@ -105,18 +105,18 @@ contract BTR is ERC20, ERC20Permit, ERC165, ReentrancyGuard, IERC7802, IXERC20 {
         if (bridges[msg.sender].mintingLimit == 0) revert IXERC20_NotHighEnoughLimits();
         _;
     }
-    
+
     /**
      * @dev Update the access control address
-     * @param _new The new access control address
+     * @param diamond The new access control address
      */
-    function updateAccessControl(address _new) external onlyAdmin {
-        if (_new == address(0)) revert ZeroAddress();
-        AccessControlFacet AC = AccessControlFacet(_new);
+    function updateAccessControl(address diamond) external onlyAdmin {
+        if (diamond == address(0)) revert ZeroAddress();
+        AccessControlFacet acs = AccessControlFacet(diamond);
         // ensure consistency between caller and the new admin
-        if (AC.admin() != msg.sender) revert NotAuthorized();
-        emit AccessControlUpdated(accessControl, _new);
-        accessControl = _new;
+        if (acs.admin() != msg.sender) revert NotAuthorized();
+        emit AccessControlUpdated(accessControl, diamond);
+        accessControl = diamond;
     }
 
     /**

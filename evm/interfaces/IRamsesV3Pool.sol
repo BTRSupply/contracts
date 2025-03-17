@@ -5,9 +5,10 @@ import {IUniV3PoolNoObs} from "@interfaces/IUniV3Pool.sol";
 
 interface IRamsesObservable {
     function observations(uint256 index) external view returns (uint32 blockTimestamp, int56 tickCumulative, uint160 secondsPerLiquidityCumulativeX128, bool initialized, uint160 secondsPerBoostedLiquidityPeriodX128);
-    function observe(uint32[] calldata secondsAgos) external view returns (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s, uint160[] memory secondsPerBoostedLiquidityPeriodX128s);
+    function observe(uint32[] calldata secondsAgos) external view returns (int56[] memory tickCumulatives, uint160[] memory intervalSecondsX128, uint160[] memory secondsPerBoostedLiquidityPeriodX128s);
     function increaseObservationCardinalityNext(uint16 observationCardinalityNext) external;
     function snapshotCumulativesInside(int24 tickLower, int24 tickUpper) external view returns (int56 tickCumulativeInside, uint160 secondsPerLiquidityInsideX128, uint160 secondsPerBoostedLiquidityInsideX128, uint32 secondsInside);
+    function positions(bytes32 key) external view returns (uint128 liquidity, uint256 innerFeeGrowth0X128, uint256 innerFeeGrowth1X128, uint128 fees0, uint128 fees1, uint256 veNftTokenId);
 }
 
 interface IRamsesV3PoolNoObs is IUniV3PoolNoObs {

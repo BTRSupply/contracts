@@ -17,7 +17,7 @@ evm:
           short_desc: Emergency pause functionality
           desc: Provides emergency stop mechanism for protocol operations
           dev_comment: Inherits from OpenZeppelin Pausable with diamond storage pattern
-        DEXAdapter.sol:
+        DEXAdapterFacet.sol:
           title: DEX Adapter
           short_desc: Base contract for DEX integrations
           desc: Abstract base contract for decentralized exchange integrations

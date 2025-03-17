@@ -6,7 +6,7 @@ interface IRamsesV3FeeDistributor {
     function WEEK() external view returns (uint256);
     function _ve() external view returns (address);
     function _deposit(uint256 amount, uint256 tokenId) external;
-    function _burnPosition(uint256 amount, uint256 tokenId) external;
+    function _burn(uint256 amount, uint256 tokenId) external;
     function balanceOf(uint256) external view returns (uint256);
     function balanceOf(address owner) external view returns (uint256 amount);
     function bribe(address token, uint256 amount) external;

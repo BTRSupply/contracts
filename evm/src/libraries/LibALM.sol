@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {LibDiamond} from "@libraries/LibDiamond.sol";
 import {LibAccessControl} from "@libraries/LibAccessControl.sol";
 import {LibTreasury as T} from "@libraries/LibTreasury.sol";
-import {ALMVault, PoolInfo, Range, Rebalance, AddressType, SwapPayload, CoreStorage, ErrorType, VaultInitParams, DEX, Registry, VaultInfo} from "@/BTRTypes.sol";
+import {ALMVault, PoolInfo, Range, Rebalance, AddressType, CoreStorage, ErrorType, VaultInitParams, DEX, Registry, FeeType} from "@/BTRTypes.sol";
 import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -13,7 +13,8 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {LibMaths as M} from "@libraries/LibMaths.sol";
 import {LibERC1155} from "@libraries/LibERC1155.sol";
 import {BTRUtils} from "@libraries/BTRUtils.sol";
-import {DEXAdapter} from "@facets/abstract/DEXAdapter.sol";
+import {DEXAdapterFacet} from "@facets/abstract/DEXAdapterFacet.sol";
+import {LibSwapper as SW} from "@libraries/LibSwapper.sol";
 
 library LibALM {
     using SafeERC20 for IERC20;
@@ -21,18 +22,16 @@ library LibALM {
     using M for uint256;
     using BTRUtils for uint32;
     using BTRUtils for bytes32;
+    using LibERC1155 for uint32;
+    using SW for address;
 
     uint256 private constant MAX_RANGES = 20;
 
-    /**
-     * @notice Enforce that an array has a positive length
-     * @param length The length to validate
-     */
     function checkRangesArrayLength(uint256 length) internal pure {
         if (length == 0) revert Errors.ZeroValue();
         if (length > MAX_RANGES) revert Errors.Exceeds(length, MAX_RANGES);
     }
-    
+
     function createVault(
         VaultInitParams calldata params
     ) internal returns (uint32 vaultId) {
@@ -52,8 +51,8 @@ library LibALM {
         vs.name = params.name;
         vs.symbol = params.symbol;
 
-        vs.token0 = params.token0;
-        vs.token1 = params.token1;
+        vs.token0 = IERC20(params.token0);
+        vs.token1 = IERC20(params.token1);
         vs.decimals = 18; // Default to 18 decimals
 
         vs.initAmount0 = params.initAmount0;
@@ -73,301 +72,59 @@ library LibALM {
         return vaultId;
     }
 
-    function getDexAdapter(DEX dex) internal view returns (address) {
-        return S.registry().dexAdapters[dex];
+    function _getDexAdapter(
+        Registry storage registry,
+        bytes32 poolId
+    ) internal view returns (address) {
+        DEX dex = registry.poolInfo[poolId].dex;
+        return registry.dexAdapters[uint8(dex)];
     }
 
-    function getDexAdapter(bytes32 poolId) internal view returns (address) {
-        Registry storage registry = S.registry();
-        return registry.dexAdapters[registry.poolInfo[poolId].dex];
+    function getDexAdapter(DEX dex) internal view returns (address) {
+        return _getDexAdapter(S.registry(), dex);
+    }
+
+    function _getPoolDexAdapter(Registry storage registry, bytes32 poolId) internal view returns (address) {
+        DEX dex = registry.poolInfo[poolId].dex;
+        return registry.dexAdapters[uint8(dex)];
+    }
+
+    function getPoolDexAdapter(bytes32 poolId) internal view returns (address) {
+        return _getPoolDexAdapter(S.registry(), poolId);
+    }
+
+    function _getRangeDexAdapter(Registry storage registry, bytes32 rangeId) internal view returns (address) {
+        Range memory range = registry.ranges[rangeId];
+        DEX dex = registry.poolInfo[range.poolId].dex;
+        return _getDexAdapter(registry, dex);
+    }
+
+    function getRangeDexAdapter(bytes32 rangeId) internal view returns (address) {
+        return _getRangeDexAdapter(S.registry(), rangeId);
     }
 
     function updateDexAdapter(DEX dex, address adapter) internal {
         // ensure that new dexs are sequentially added (if dex is not 0)
         uint8 dexIndex = uint8(dex);
         Registry storage registry = S.registry();
-        if (dexIndex > 0 && registry.dexAdapters[DEX(dexIndex - 1)] != address(0))
-            revert Errors.UnexpectedInput();
-        registry.dexAdapters[dex] = adapter;
+        if (
+            dexIndex > 0 &&
+            registry.dexAdapters[dexIndex - 1] != address(0)
+        ) revert Errors.UnexpectedInput();
+        registry.dexAdapters[dexIndex] = adapter;
     }
 
-    // should return the current weights of token0 and token1 in the vault
-    // to reflect the 
-    function getRatios0(
-        uint32 vaultId
-    ) internal view returns (uint256[] memory ratios0) {      
-        ALMVault storage vs = vaultId.getVault();
-        if (vs.ranges.length == 0) {
-            revert Errors.NotFound(ErrorType.RANGE);
-        }
-        ratios0 = new uint256[](vs.ranges.length);
-        for (uint256 i = 0; i < vs.ranges.length;) {
-            Range storage range = vs.ranges[i];
-            address adapterAddress = getDexAdapter(range.poolId);
-            uint256 ratio0 = _getRangeRatio0(adapterAddress, range.id);
-            ratios0[i] = ratio0;
-            unchecked {
-                i++;
-            }
-        }
-    }
-    
-    /**
-     * @notice Calculate the token ratio for a range with standardized liquidity
-     * @param adapterAddress The DEX adapter address
-     * @param rangeId The range ID
-     * @return ratio0 Amount of token0 for standardized liquidity
-     */
-    function _getRangeRatio0(
-        address adapterAddress, 
-        bytes32 rangeId
-    ) internal view returns (uint256 ratio0) {
-        (bool success, bytes memory data) = adapterAddress.staticcall(
-            abi.encodeWithSelector(
-                DEXAdapter.getLiquidityRatio0.selector,
-                rangeId
-            )
-        );
-        if (!success) {
-            revert Errors.StaticCallFailed();
-        }
-        (ratio0) = abi.decode(data, (uint256));
-    }
-
-    function targetRatio0(
-        uint32 vaultId
-    ) internal view returns (uint256 targetPBp0) {
-        ALMVault storage vs = vaultId.getVault();
-        uint256[] memory ratios0 = getRatios0(vaultId);
-        unchecked {
-            for (uint256 i = 0; i < vs.ranges.length; i++) {
-                // multiply effective ranges ratio by target weights
-                targetPBp0 += ratios0[i].mulDivDown(vs.ranges[i].weightBps, M.BP_BASIS);
-            }
-        }
-    }
-
-    function targetRatio1(
-        uint32 vaultId
-    ) internal view returns (uint256 targetPBp1) {
-        return M.PRECISION_BP_BASIS.subMax0(targetRatio0(vaultId));
-    }
-
-    function previewDeposit1For0(
-        uint32 vaultId,
-        uint256 amount0
-    ) internal view returns (uint256 amount1) {
-        return amount0.mulDivDown(targetRatio1(vaultId), M.PRECISION_BP_BASIS);
-    }
-
-    function previewDeposit0For1(
-        uint32 vaultId,
-        uint256 amount1
-    ) internal view returns (uint256 amount0) {
-        return amount1.mulDivDown(targetRatio0(vaultId), M.PRECISION_BP_BASIS);
-    }
-
-    /**
-     * @notice Preview the token amounts required for minting a specific amount of shares
-     * @param vaultId The vault ID
-     * @param mintAmount The amount of shares to mint
-     * @return amount0 The amount of token0 required
-     * @return amount1 The amount of token1 required
-     * @return fee0 The amount of token0 that will be taken as fee
-     * @return fee1 The amount of token1 that will be taken as fee
-     */
-    function previewDeposit(
-        uint32 vaultId,
-        uint256 mintAmount
-    ) internal view returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
-        ALMVault storage vs = vaultId.getVault();
-        
-        if (vs.totalSupply == 0) {
-            // For first deposit, use init amounts
-            amount0 = vs.initAmount0.mulDivDown(mintAmount, vs.initShares);
-            amount1 = vs.initAmount1.mulDivDown(mintAmount, vs.initShares);
-        } else {
-            // For subsequent deposits, calculate based on current token balance ratios
-            (uint256 vaultBalance0, uint256 vaultBalance1) = getVaultTotalBalances(vaultId);
-            amount0 = vaultBalance0.mulDivUp(mintAmount, vs.totalSupply);
-            amount1 = vaultBalance1.mulDivUp(mintAmount, vs.totalSupply);
-        }
-
-        // Calculate fees if configured
-        if (vs.fees.entry > 0) {
-            fee0 = amount0.bpUp(vs.fees.entry);
-            fee1 = amount1.bpUp(vs.fees.entry);
-            
-            // Adjust amounts UP to account for entry fee - total amount needed from user
-            amount0 = amount0 + fee0;
-            amount1 = amount1 + fee1;
-        }
-        
-        return (amount0, amount1, fee0, fee1);
-    }
-
-    function deposit(
-        uint32 vaultId,
-        uint256 mintAmount,
-        address receiver
-    ) internal returns (uint256 supply0, uint256 supply1) {
-        ALMVault storage vs = vaultId.getVault();
-
-        if (mintAmount == 0) revert Errors.ZeroValue();
-
-        // Check that mint wouldn't exceed maxSupply
-        if (vs.totalSupply + mintAmount > vs.maxSupply) {
-            revert Errors.Exceeds(vs.totalSupply + mintAmount, vs.maxSupply);
-        }
-
-        // Preview how much of each token is needed and get fee info
-        uint256 fee0;
-        uint256 fee1;
-        (supply0, supply1, fee0, fee1) = previewDeposit(vaultId, mintAmount);
-
-        // Transfer the exact amounts from user to contract
-        IERC20(vs.token0).safeTransferFrom(msg.sender, address(this), supply0);
-        IERC20(vs.token1).safeTransferFrom(msg.sender, address(this), supply1);
-        
-        // Calculate adjusted mint amount after fees
-        uint256 adjustedMintAmount = mintAmount;
-        if (vs.fees.entry > 0) {
-            // Add fees to pending fees
-            vs.pendingFees[IERC20(vs.token0)] += fee0;
-            vs.pendingFees[IERC20(vs.token1)] += fee1;
-            
-            // Adjust mint amount down by entry fee percentage
-            adjustedMintAmount = mintAmount.subBpDown(vs.fees.entry);
-        }
-
-        // Mint adjusted vault shares for the user
-        LibERC1155.mint(vaultId, receiver, adjustedMintAmount);
-
-        emit Events.Minted(receiver, adjustedMintAmount, supply0, supply1);
-        return (supply0, supply1);
-    }
-
-    function withdraw(
-        uint32 vaultId,
-        uint256 burnAmount,
-        address receiver
-    ) internal returns (uint256 amount0, uint256 amount1) {
-        ALMVault storage vs = vaultId.getVault();
-
-        if (burnAmount == 0) revert Errors.ZeroValue();
-        if (vs.totalSupply == 0) revert Errors.ZeroValue();
-
-        // Preview how much of each token to withdraw and get fee info
-        uint256 fee0;
-        uint256 fee1;
-        (amount0, amount1, fee0, fee1) = previewWithdraw(vaultId, burnAmount);
-
-        // Burn the vault shares
-        LibERC1155.burn(vaultId, msg.sender, burnAmount);
-
-        // Apply exit fee if configured
-        if (vs.fees.exit > 0) {
-            // Add exit fees to pending fees
-            vs.pendingFees[IERC20(vs.token0)] += fee0;
-            vs.pendingFees[IERC20(vs.token1)] += fee1;
-        }
-
-        // Withdraw tokens from ranges
-        _withdrawFromRanges(vaultId, burnAmount, amount0, amount1);
-
-        // Transfer tokens to the receiver
-        if (amount0 > 0) {
-            IERC20(vs.token0).safeTransfer(receiver, amount0);
-        }
-        if (amount1 > 0) {
-            IERC20(vs.token1).safeTransfer(receiver, amount1);
-        }
-
-        emit Events.Burnt(receiver, burnAmount, amount0, amount1);
-        return (amount0, amount1);
-    }
-    
-    /**
-     * @notice Withdraw tokens from ranges proportionally
-     * @param vaultId The vault ID
-     * @param burnAmount The amount of shares being burned
-     * @param targetAmount0 The target amount of token0 to withdraw
-     * @param targetAmount1 The target amount of token1 to withdraw
-     */
-    function _withdrawFromRanges(
-        uint32 vaultId,
-        uint256 burnAmount, 
-        uint256 targetAmount0, 
-        uint256 targetAmount1
-    ) internal {
-        ALMVault storage vs = vaultId.getVault();
-        
-        // Calculate the withdrawal proportion
-        uint256 proportion = burnAmount.mulDivUp(1e18, vs.totalSupply);
-        
-        // Withdraw proportionally from each range
-        for (uint256 i = 0; i < vs.ranges.length; i++) {
-            Range storage range = vs.ranges[i];
-            
-            // Skip ranges with no liquidity
-            if (range.liquidity == 0) continue;
-            
-            // Calculate liquidity to withdraw from this range
-            uint128 liquidityToWithdraw = uint128(uint256(range.liquidity).mulDivUp(proportion, 1e18));
-            
-            // Skip if no liquidity to withdraw
-            if (liquidityToWithdraw == 0) continue;
-            
-            // Update range liquidity before withdrawal
-            range.liquidity -= liquidityToWithdraw;
-            
-            // Create a temporary range with the withdrawal liquidity
-            bytes32 tempRangeId = keccak256(abi.encodePacked("withdraw", range.id, liquidityToWithdraw));
-            Range memory tempRange = Range({
-                id: tempRangeId,
-                vaultId: vaultId,
-                poolId: range.poolId,
-                positionId: range.positionId,
-                weightBps: 0,
-                liquidity: liquidityToWithdraw,
-                lowerTick: range.lowerTick,
-                upperTick: range.upperTick
-            });
-            
-            // Store the temp range
-            S.registry().ranges[tempRangeId] = tempRange;
-            
-            // Call the DEX adapter to withdraw the liquidity
-            address adapterAddress = getDexAdapter(range.poolId);
-            (bool success, bytes memory data) = adapterAddress.delegatecall(
-                abi.encodeWithSelector(
-                    DEXAdapter.withdraw.selector,
-                    tempRangeId
-                )
-            );
-            
-            if (!success) {
-                revert Errors.DelegateCallFailed();
-            }
-            
-            // Clean up the temporary range
-            delete S.registry().ranges[tempRangeId];
-        }
-    }
-
-    function getVaultTotalBalances(
-        uint32 vaultId
-    ) internal view returns (uint256 balance0, uint256 balance1) {
-        ALMVault storage vs = vaultId.getVault();
-
-        // Get undeployed token balances (reserved for this vault)
-        balance0 = 0; // vs.token0.balanceOf(address(this)).subMax0(vs.pending[0]);
-        balance1 = 0; // vs.token1.balanceOf(address(this)).subMax0(vs.pending[1]);
+    function _getTotalBalances(
+        ALMVault storage vs,
+        Registry storage registry
+    ) internal returns (uint256 balance0, uint256 balance1) {
+        // NB: undeployed token balances are shared between all vaults, not part of this vault's accounting
+        // balance0 = vs.token0.balanceOf(address(this)).subMax0(vs.pendingFees[vs.token0]);
+        // balance1 = vs.token1.balanceOf(address(this)).subMax0(vs.pendingFees[vs.token1]);
 
         // Add tokens deployed in liquidity positions
-        Range[] storage ranges = vs.ranges;
-        for (uint256 i = 0; i < ranges.length; i++) {
-            Range storage range = ranges[i];
+        for (uint256 i = 0; i < vs.ranges.length; i++) {
+            Range memory range = registry.ranges[vs.ranges[i]];
             // Ensure rangeId is set
             if (range.id == bytes32(0)) {
                 // This should not be possible
@@ -376,486 +133,927 @@ library LibALM {
 
             // Skip ranges with no liquidity
             if (range.liquidity == 0) continue;
-            
-            // Use staticcall for read-only function with rangeId only
+
+            // Use delegatecall for read-only function with rangeId to access the same storage context
             bytes memory callData = abi.encodeWithSelector(
-                DEXAdapter.getAmountsForLiquidity.selector,
+                DEXAdapterFacet.getAmountsForLiquidity.selector,
                 range.id
             );
 
-            // Execute staticcall
-            (bool success, bytes memory returnData) = getDexAdapter(range.poolId).staticcall(callData);
-            if (!success) revert Errors.StaticCallFailed();
-            
+            // Execute delegatecall to preserve storage context
+            (bool success, bytes memory returnData) = _getDexAdapter(
+                registry,
+                range.poolId
+            ).delegatecall(callData);
+            if (!success) revert Errors.DelegateCallFailed();
+
             // Decode return data
-            (uint256 posAmount0, uint256 posAmount1) = abi.decode(returnData, (uint256, uint256));
-            
+            (uint256 posAmount0, uint256 posAmount1) = abi.decode(
+                returnData,
+                (uint256, uint256)
+            );
+
             balance0 += posAmount0;
             balance1 += posAmount1;
         }
-        
+
         return (balance0, balance1);
     }
 
-    /**
-     * @notice Calculate performance fees on LP fees
-     * @param vaultId The vault ID
-     * @param lpFees0 LP fees for token0
-     * @param lpFees1 LP fees for token1
-     * @return perfFee0 Performance fee for token0
-     * @return perfFee1 Performance fee for token1
-     */
-    function getPerformanceFees(
-        uint32 vaultId,
-        uint256 lpFees0,
-        uint256 lpFees1
-    ) internal returns (uint256 perfFee0, uint256 perfFee1) {
-        ALMVault storage vs = vaultId.getVault();
-        
-        if (vs.fees.perf > 0 && (lpFees0 > 0 || lpFees1 > 0)) {
-            perfFee0 = lpFees0.mulDivUp(vs.fees.perf, M.BP_BASIS);
-            
-            perfFee1 = lpFees1.mulDivUp(vs.fees.perf, M.BP_BASIS);
-            
-            // Add performance fees to pending fees
-            vs.pendingFees[IERC20(vs.token0)] += perfFee0;
-            vs.pendingFees[IERC20(vs.token1)] += perfFee1;
-        }
-        
-        return (perfFee0, perfFee1);
+    function getTotalBalances(
+        uint32 vaultId
+    ) internal returns (uint256 balance0, uint256 balance1) {
+        return _getTotalBalances(vaultId.getVault(), S.registry());
     }
 
-    function getManagementFees(uint32 vaultId) internal returns (uint256 mgmtFee0, uint256 mgmtFee1) {
-        ALMVault storage vs = vaultId.getVault();
-        
-        // Calculate time elapsed since last fee accrual - ensure no underflow
-        uint256 elapsed = block.timestamp > vs.feeAccruedAt ? 
-                          block.timestamp - vs.feeAccruedAt : 0;
-
-        if (elapsed > 0 && vs.fees.mgmt > 0) {
-            // Get current token balances (including deployed positions)
-            (uint256 balance0, uint256 balance1) = getVaultTotalBalances(vaultId);
-            
-            // Calculate pro-rated management fee for the elapsed period - round UP for protocol favor
-            uint256 durationBps = elapsed.mulDivUp(M.PRECISION_BP_BASIS, M.SEC_PER_YEAR); // in PRECISION_BP_BASIS
-
-            // Apply management fee rate to token balances - round UP for protocol favor
-            uint256 mgmtFeesBps = uint256(vs.fees.mgmt);
-            uint256 scaledRate = mgmtFeesBps.mulDivUp(durationBps, M.BP_BASIS); // in PRECISION_BP_BASIS
-
-            mgmtFee0 = balance0.mulDivUp(scaledRate, M.PRECISION_BP_BASIS); // back to wei
-            mgmtFee1 = balance1.mulDivUp(scaledRate, M.PRECISION_BP_BASIS); // back to wei
-            
-            // Add management fees to pending fees
-            vs.pendingFees[IERC20(vs.token0)] += mgmtFee0;
-            vs.pendingFees[IERC20(vs.token1)] += mgmtFee1;
+    function _getWeights(
+        ALMVault storage vs,
+        Registry storage registry
+    ) internal view returns (uint256[] memory weights0) {
+        weights0 = new uint256[](vs.ranges.length);
+        for (uint256 i = 0; i < vs.ranges.length; i++) {
+            weights0[i] = registry.ranges[vs.ranges[i]].weightBps;
         }
-        
-        return (mgmtFee0, mgmtFee1);
     }
 
-    function collectFees(uint32 vaultId) internal returns (uint256 fees0, uint256 fees1) {
-        ALMVault storage vault = vaultId.getVault();
-
-        // Get the pending fees for this vault
-        fees0 = vault.pendingFees[IERC20(vault.token0)];
-        fees1 = vault.pendingFees[IERC20(vault.token1)];
-
-        // Reset pending fees
-        vault.pendingFees[IERC20(vault.token0)] = 0;
-        vault.pendingFees[IERC20(vault.token1)] = 0;
-
-        // Update accrued fees for this vault
-        vault.accruedFees[IERC20(vault.token0)] += fees0;
-        vault.accruedFees[IERC20(vault.token1)] += fees1;
-
-        // Transfer fees to the treasury
-        address treasury = S.core().treasury.treasury;
-        if (fees0 > 0) {
-            IERC20(vault.token0).safeTransfer(treasury, fees0);
-        }
-        if (fees1 > 0) {
-            IERC20(vault.token1).safeTransfer(treasury, fees1);
-        }
-
-        // Update last fee collection timestamp
-        vault.feesCollectedAt = uint64(block.timestamp);
-        emit Events.FeesCollected(vaultId, address(vault.token0), address(vault.token1), fees0, fees1);
-        
-        return (fees0, fees1);
+    function getWeights(
+        uint32 vaultId
+    ) internal view returns (uint256[] memory weights0) {
+        return _getWeights(vaultId.getVault(), S.registry());
     }
 
-    /**
-     * @notice Process a swap during rebalance
-     * @param vaultId The vault ID
-     * @param swap The swap payload containing router address and swap data
-     */
-    function processSwap(uint32 vaultId, SwapPayload memory swap) internal {
-        // Validate vault before executing swap
-        require(vaultId > 0, Errors.ZeroValue());
-        
-        // Execute swap through the router
-        (bool success, ) = swap.router.call(swap.swapData);
-        if (!success) revert Errors.SwapFailed();
+    // in PRECISION_BP_BASIS
+    function _getRangeRatio0(
+        address adapterAddress,
+        bytes32 rangeId
+    ) internal returns (uint256 ratio0) {
+        (bool success, bytes memory data) = adapterAddress.delegatecall(
+            abi.encodeWithSelector(
+                DEXAdapterFacet.getLiquidityRatio0.selector,
+                rangeId
+            )
+        );
+        if (!success) {
+            revert Errors.DelegateCallFailed();
+        }
+        (ratio0) = abi.decode(data, (uint256));
     }
 
-    /**
-     * @notice Rebalance a vault by burning ranges, swapping tokens, and adding new ranges
-     * @dev This function processes burns, swaps and mints in sequence
-     * @param rebalance The rebalance data containing burns, swaps and mints
-     * @return protocolFees0 The amount of protocol fees collected (token0)
-     * @return protocolFees1 The amount of protocol fees collected (token1)
-     */
-    function rebalance(
-        uint32 vaultId,
-        Rebalance memory rebalance
-    ) internal returns (uint256 protocolFees0, uint256 protocolFees1) {
-        // Validate inputs
-        checkRangesArrayLength(rebalance.burns.length);
-        checkRangesArrayLength(rebalance.mints.length);
-        ALMVault storage vs = vaultId.getVault();
-        
-        // Ensure vault is not paused
-        if (vs.paused) revert Errors.Paused(ErrorType.VAULT);
-        
-        // Initialize tracking variables
-        uint256 totalWithdrawn0 = 0;
-        uint256 totalWithdrawn1 = 0;
-        uint256 totalLpFees0 = 0;
-        uint256 totalLpFees1 = 0;
-        
-        // Get operation lengths
-        uint256 burnLength = rebalance.burns.length;
-        uint256 swapLength = rebalance.swaps.length;
-        uint256 mintLength = rebalance.mints.length;
-        
-        // Use a single loop to process corresponding operations
-        uint256 maxOps = burnLength;
-        if (swapLength > maxOps) maxOps = swapLength;
-        if (mintLength > maxOps) maxOps = mintLength;
-        
-        for (uint256 i = 0; i < maxOps; ++i) {
-            // 1. Process burn if index is valid
-            if (i < burnLength) {
-                Range memory burnRange = rebalance.burns[i];
-                bytes32 rangeId = burnRange.id;
-                
-                Range storage range = rangeId.getRange();
-                
-                // Check if the range belongs to this vault
-                if (range.vaultId != vaultId) {
-                    revert Errors.Unauthorized(ErrorType.VAULT);
-                }
-                
-                // Execute delegate call to withdraw liquidity
-                address adapterAddress = getDexAdapter(range.poolId);
-                (bool success, bytes memory data) = adapterAddress.delegatecall(
-                    abi.encodeWithSelector(
-                        DEXAdapter.withdraw.selector,
-                        rangeId
-                    )
-                );
-                if (!success) revert Errors.DelegateCallFailed();
-                
-                // Extract withdrawn amounts and LP fees
-                (uint256 amount0, uint256 amount1, uint256 lpFees0, uint256 lpFees1) = 
-                    abi.decode(data, (uint256, uint256, uint256, uint256));
-                    
-                // Accumulate withdrawn amounts and LP fees
-                totalWithdrawn0 += amount0;
-                totalWithdrawn1 += amount1;
-                totalLpFees0 += lpFees0;
-                totalLpFees1 += lpFees1;
-                
-                // Remove the range from the vault's range array
-                bool found = false;
-                uint256 indexToRemove;
-                for (uint256 j = 0; j < vs.ranges.length; j++) {
-                    if (vs.ranges[j].id == rangeId) {
-                        found = true;
-                        indexToRemove = j;
-                        break;
-                    }
-                }
-                
-                // If found, use swap and pop pattern (more gas efficient)
-                if (found && vs.ranges.length > 0) {
-                    // If not the last element, swap with the last element
-                    if (indexToRemove < vs.ranges.length - 1) {
-                        vs.ranges[indexToRemove] = vs.ranges[vs.ranges.length - 1];
-                    }
-                    // Remove the last element
-                    vs.ranges.pop();
-                }
-                
-                // Delete the range from storage
-                delete S.registry().ranges[rangeId];
-            }
-            
-            // 2. Process swap if index is valid
-            if (i < swapLength) {
-                processSwap(vaultId, rebalance.swaps[i]);
-            }
-            
-            // 3. Process mint if index is valid
-            if (i < mintLength) {
-                Range memory range = rebalance.mints[i];
-                
-                // Ensure vaultId is set
-                range.vaultId = vaultId;
-                
-                // Get the DEX adapter for this pool
-                address adapterAddress = getDexAdapter(range.poolId);
-                
-                // Generate or use existing rangeId
-                bytes32 rangeId;
-                if (range.id == bytes32(0)) {
-                    // Generate a new rangeId based on vault, pool, and ticks
-                    rangeId = keccak256(abi.encodePacked(
-                        vaultId, 
-                        range.poolId, 
-                        range.lowerTick, 
-                        range.upperTick
-                    ));
-                    range.id = rangeId;
-                } else {
-                    rangeId = range.id;
-                }
-                
-                // Update position ID if needed - ensure it's stored as uint256 but generated as bytes32
-                if (uint256(range.positionId) == 0) {
-                    bytes32 newPositionId = keccak256(abi.encodePacked(
-                        address(this),
-                        range.lowerTick,
-                        range.upperTick
-                    ));
-                    range.positionId = uint256(uint160(bytes20(newPositionId)));
-                }
-                
-                // Execute delegate call to mint liquidity
-                (bool success, bytes memory data) = adapterAddress.delegatecall(
-                    abi.encodeWithSelector(
-                        bytes4(keccak256("mint(bytes32)")),
-                        rangeId
-                    )
-                );
-                if (!success) revert Errors.DelegateCallFailed();
-                
-                // Update the range with the liquidity amount
-                (range.liquidity, , ) = abi.decode(data, (uint128, uint256, uint256));
-                
-                // Store range in protocol-level mapping for future lookups
-                S.registry().ranges[rangeId] = range;
-                
-                // Also add to backward-compatible array
-                vs.ranges.push(range);
+    // in PRECISION_BP_BASIS
+    function _getRatios0(
+        ALMVault storage vs,
+        Registry storage registry
+    ) internal returns (uint256[] memory ratios0) {
+        ratios0 = new uint256[](vs.ranges.length);
+        if (vs.ranges.length == 0) {
+            revert Errors.NotFound(ErrorType.RANGE);
+        }
+        for (uint256 i = 0; i < vs.ranges.length;) {
+            Range memory range = registry.ranges[vs.ranges[i]];
+            address adapterAddress = _getPoolDexAdapter(registry, range.poolId);
+            uint256 ratio0 = _getRangeRatio0(adapterAddress, range.id);
+            ratios0[i] = ratio0;
+            unchecked {
+                i++;
             }
         }
-        
-        return (totalLpFees0, totalLpFees1);
     }
 
-    /**
-     * @notice Generic function to calculate share amount for a given token amount
-     * @param vaultId The vault ID
-     * @param tokenAmount The token amount
-     * @param isToken0 Whether the amount is for token0 (true) or token1 (false)
-     * @param applyFees Whether to apply fees in the calculation
-     * @return shareAmount The equivalent share amount
-     */
-    function _amountToShares(
-        uint32 vaultId, 
-        uint256 tokenAmount,
-        bool isToken0,
-        bool applyFees
-    ) internal view returns (uint256 shareAmount) {
-        ALMVault storage vs = vaultId.getVault();
-        
-        if (tokenAmount == 0 || vs.totalSupply == 0) {
-            return 0;
-        }
-        
-        (uint256 balance0, uint256 balance1) = getVaultTotalBalances(vaultId);
-        
-        // Get the correct balance based on token
-        uint256 balance = isToken0 ? balance0 : balance1;
-        
-        // Account for exit fees if applicable and requested
-        if (applyFees && vs.fees.exit > 0) {
-            // Need to add fee percentage to get gross amount
-            tokenAmount = tokenAmount.mulDivUp(M.BP_BASIS, M.BP_BASIS - vs.fees.exit);
-        }
-        
-        // Calculate share amount
-        shareAmount = tokenAmount.mulDivUp(vs.totalSupply, balance);
-        
-        return shareAmount;
+    // should return the current weights of token0 and token1 in the vault
+    // to reflect the
+    function getRatios0(
+        uint32 vaultId
+    ) internal returns (uint256[] memory ratios0) {
+        return _getRatios0(vaultId.getVault(), S.registry());
     }
-    
+
+    // in PRECISION_BP_BASIS
+    function _getRatio0(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 index
+    ) internal returns (uint256 ratio0) {
+        (uint256 amount0, uint256 amount1) = _getTotalBalances(vs, registry);
+        return amount0.mulDivDown(M.PRECISION_BP_BASIS, amount0 + amount1);
+    }
+
+    // in PRECISION_BP_BASIS
+    function _targetRatio0(
+        ALMVault storage vs,
+        Registry storage registry
+    ) internal returns (uint256 targetPBp0) {
+        uint256[] memory ratios0 = _getRatios0(vs, registry);
+        uint256[] memory weights = _getWeights(vs, registry);
+        unchecked {
+            for (uint256 i = 0; i < vs.ranges.length; i++) {
+                targetPBp0 += ratios0[i].mulDivDown(weights[i], M.BP_BASIS);
+            }
+        }
+    }
+
+    function targetRatio0(
+        uint32 vaultId
+    ) internal returns (uint256 targetPBp0) {
+        return _targetRatio0(vaultId.getVault(), S.registry());
+    }
+
+    // in PRECISION_BP_BASIS
+    function _targetRatio1(
+        ALMVault storage vs,
+        Registry storage registry
+    ) internal returns (uint256 targetPBp1) {
+        return M.PRECISION_BP_BASIS.subMax0(_targetRatio0(vs, registry));
+    }
+
+    function targetRatio1(
+        uint32 vaultId
+    ) internal returns (uint256 targetPBp1) {
+        return _targetRatio1(vaultId.getVault(), S.registry());
+    }
+
     /**
      * @notice Generic function to calculate token amounts for a given share amount
-     * @param vaultId The vault ID
-     * @param shareAmount The share amount
-     * @param applyFees Whether to apply fees in the calculation
+     * @param vs The vault storage reference
+     * @param shares The share amount
+     * @param feeType The type of fee to apply (NONE, ENTRY, EXIT)
      * @return amount0 The amount of token0
      * @return amount1 The amount of token1
      * @return fee0 The fee amount for token0
      * @return fee1 The fee amount for token1
      */
     function _sharesToAmounts(
-        uint32 vaultId,
-        uint256 shareAmount,
-        bool applyFees
-    ) internal view returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
-        ALMVault storage vs = vaultId.getVault();
-        
-        if (shareAmount == 0 || vs.totalSupply == 0) {
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 shares,
+        FeeType feeType
+    ) internal returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
+        if (shares == 0)
             return (0, 0, 0, 0);
+        if (vs.totalSupply == 0) {
+            // For first deposit, use init amounts to determine share amount
+            amount0 = vs.initAmount0.mulDivDown(shares, vs.initShares);
+            amount1 = vs.initAmount1.mulDivDown(shares, vs.initShares);
+        } else {
+            (uint256 balance0, uint256 balance1) = _getTotalBalances(vs, registry);
+            amount0 = balance0.mulDivUp(shares, vs.totalSupply);
+            amount1 = balance1.mulDivUp(shares, vs.totalSupply);
         }
-        
-        // Calculate proportional token amounts
-        (uint256 balance0, uint256 balance1) = getVaultTotalBalances(vaultId);
-        amount0 = balance0.mulDivDown(shareAmount, vs.totalSupply);
-        amount1 = balance1.mulDivDown(shareAmount, vs.totalSupply);
-        
-        // Calculate and apply exit fee if configured and requested
-        if (applyFees && vs.fees.exit > 0) {
+        if (feeType == FeeType.ENTRY && vs.fees.entry > 0) {
+            fee0 = amount0.revBpUp(vs.fees.entry);
+            fee1 = amount1.revBpUp(vs.fees.entry);
+            amount0 += fee0; // more tokens for the same minted shares
+            amount1 += fee1;
+        } else if (feeType == FeeType.EXIT && vs.fees.exit > 0) {
             fee0 = amount0.bpUp(vs.fees.exit);
             fee1 = amount1.bpUp(vs.fees.exit);
-            
-            // Subtract fees from withdrawal amounts
-            amount0 = amount0 - fee0;
-            amount1 = amount1 - fee1;
+            amount0 -= fee0; // less tokens out for the same burnt shares
+            amount1 -= fee1;
         }
-        
-        return (amount0, amount1, fee0, fee1);
     }
 
     /**
-     * @notice Preview the token amounts to be received for burning a specific amount of shares
-     * @param vaultId The vault ID
-     * @param burnAmount The amount of shares to burn
-     * @return amount0 The amount of token0 to be received
-     * @return amount1 The amount of token1 to be received
-     * @return fee0 The fee amount for token0
-     * @return fee1 The fee amount for token1
+     * @notice Generic function to calculate share amount for given token amounts
+     * @param vs The vault storage reference
+     * @param amount0 The amount of token0
+     * @param amount1 The amount of token1
+     * @param feeType The type of fee to apply (NONE, ENTRY, EXIT)
+     * @return shares The equivalent share amount
      */
-    function previewWithdraw(
-        uint32 vaultId,
-        uint256 burnAmount
-    ) internal view returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
-        return _sharesToAmounts(vaultId, burnAmount, true);
+    function _amountsToShares(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 amount0,
+        uint256 amount1,
+        FeeType feeType
+    ) internal returns (uint256 shares, uint256 fee0, uint256 fee1) {
+        if (amount0 == 0 && amount1 == 0) {
+            return (0, 0, 0);
+        }
+
+        (uint256 balance0, uint256 balance1) = _getTotalBalances(vs, registry);
+
+        if (balance0.mulDivDown(M.PRECISION_BP_BASIS, balance0 + balance1)
+            != amount0.mulDivDown(M.PRECISION_BP_BASIS, amount0 + amount1)) {
+            revert Errors.UnexpectedInput(); // ratio breach
+        }
+
+        shares = uint256(amount0 + amount1).mulDivDown(vs.totalSupply, balance0 + balance1); // zero protection
+
+        if (feeType == FeeType.ENTRY && vs.fees.entry > 0) {
+            fee0 = amount0.bpUp(vs.fees.entry);
+            fee1 = amount1.bpUp(vs.fees.entry);
+            shares -= shares.bpUp(vs.fees.entry); // less shares minted for the same amount in
+        } else if (feeType == FeeType.EXIT && vs.fees.exit > 0) {
+            fee0 = amount0.revBpUp(vs.fees.exit);
+            fee1 = amount1.revBpUp(vs.fees.exit);
+            shares += shares.revBpUp(vs.fees.exit); // more shares burnt to get the same amount out
+        }
     }
 
-    /**
-     * @notice Preview how much token1 would be withdrawn for a given amount of token0
-     * @param vaultId The vault ID
-     * @param amount0 The amount of token0 to withdraw
-     * @return amount1 The amount of token1 to be withdrawn
-     * @return shareAmount The amount of shares that would be burned
-     * @return fee0 The fee amount for token0
-     * @return fee1 The fee amount for token1
-     */
-    function previewWithdraw0For1(
-        uint32 vaultId,
-        uint256 amount0
-    ) internal view returns (uint256 amount1, uint256 shareAmount, uint256 fee0, uint256 fee1) {
-        ALMVault storage vs = vaultId.getVault();
+    function _burnAllRanges(
+        ALMVault storage vs,
+        Registry storage registry
+    ) internal returns (uint256 totalAmount0, uint256 totalAmount1, uint256 totalLpFees0, uint256 totalLpFees1) {
+        uint256 amount0; uint256 amount1; uint256 lpFees0; uint256 lpFees1;
+        uint256 length = vs.ranges.length;
+        unchecked {
+            for (uint256 i = 0; i < length; i++) {
+                (amount0, amount1, lpFees0, lpFees1) = _burnRange(vs, registry, 0); // index0 since we're swapping and popping
+                totalAmount0 += amount0;
+                totalAmount1 += amount1;
+                totalLpFees0 += lpFees0;
+                totalLpFees1 += lpFees1;
+            }
+        }
+        return (totalAmount0, totalAmount1, totalLpFees0, totalLpFees1);
+    }
+
+    function _burnAllRanges(ALMVault storage vs, Rebalance memory rebalanceData) internal returns (uint256 totalAmount0, uint256 totalAmount1, uint256 totalLpFees0, uint256 totalLpFees1) {
+        Registry storage registry = S.registry();
+        uint256 burnLength = rebalanceData.ranges.length;
+        uint256 amount0; uint256 amount1; uint256 lpFees0; uint256 lpFees1;
         
-        if (amount0 == 0 || vs.totalSupply == 0) {
+        for (uint256 i = 0; i < burnLength; ++i) {
+            bytes32 rangeId = rebalanceData.ranges[i].id;
+            // Find the index of the range in vs.ranges
+            uint256 index;
+            bool found = false;
+            
+            for (uint256 j = 0; j < vs.ranges.length; ++j) {
+                if (vs.ranges[j] == rangeId) {
+                    index = j;
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (!found) continue; // Skip if range not found
+            
+            (amount0, amount1, lpFees0, lpFees1) = _burnRange(vs, registry, index);
+            
+            // Accumulate amounts and fees
+            totalAmount0 += amount0;
+            totalAmount1 += amount1;
+            totalLpFees0 += lpFees0;
+            totalLpFees1 += lpFees1;
+        }
+
+        return (totalAmount0, totalAmount1, totalLpFees0, totalLpFees1);
+    }
+
+    function _previewDeposit(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 mintShares
+    ) internal returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
+        return _sharesToAmounts(vs, registry, mintShares, FeeType.ENTRY);
+    }
+
+    function _previewDeposit(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 amount0,
+        uint256 amount1
+    ) internal returns (uint256 mintShares, uint256 fee0, uint256 fee1) {
+        return _amountsToShares(vs, registry, amount0, amount1, FeeType.ENTRY);
+    }
+
+    function previewDeposit(
+        uint32 vaultId,
+        uint256 sharesMinted
+    )
+        internal
+        returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1)
+    {
+        return _previewDeposit(vaultId.getVault(), S.registry(), sharesMinted);
+    }
+
+    function previewDeposit(
+        uint32 vaultId,
+        uint256 amount0,
+        uint256 amount1
+    )
+        internal
+        returns (uint256 sharesAmount, uint256 fee0, uint256 fee1)
+    {
+        return _previewDeposit(vaultId.getVault(), S.registry(), amount0, amount1);
+    }
+
+    function _previewDeposit0For1(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 amount1
+    ) internal returns (uint256 amount0, uint256 mintShares, uint256 fee0, uint256 fee1) {
+        uint256 ratio0 = _targetRatio0(vs, registry);
+        if (amount1 == 0 || vs.totalSupply == 0 || ratio0 == 0) {
             return (0, 0, 0, 0);
         }
-        
-        // Calculate necessary share amount to withdraw this much token0
-        shareAmount = _amountToShares(vaultId, amount0, true, true);
-        
-        // Calculate corresponding token amounts including fees
-        uint256 totalAmount0;
-        (totalAmount0, amount1, fee0, fee1) = _sharesToAmounts(vaultId, shareAmount, true);
-        
-        // Double-check that we're getting the requested amount0 (minus fees)
-        if (totalAmount0 < amount0) {
-            // Adjust share amount up slightly to ensure the user gets at least the requested amount
-            shareAmount = shareAmount.mulDivUp(amount0, totalAmount0);
-            (totalAmount0, amount1, fee0, fee1) = _sharesToAmounts(vaultId, shareAmount, true);
-        }
-        
-        return (amount1, shareAmount, fee0, fee1);
+        // cross product: amount0 = (ratio0 * amount1) / ratio1
+        amount0 = ratio0.mulDivDown(amount1, M.PRECISION_BP_BASIS - ratio0);
+        (mintShares, fee0, fee1) = _amountsToShares(vs, registry, amount0, amount1, FeeType.ENTRY);
     }
-    
-    /**
-     * @notice Preview how much token0 would be withdrawn for a given amount of token1
-     * @param vaultId The vault ID
-     * @param amount1 The amount of token1 to withdraw
-     * @return amount0 The amount of token0 to be withdrawn
-     * @return shareAmount The amount of shares that would be burned
-     * @return fee0 The fee amount for token0
-     * @return fee1 The fee amount for token1
-     */
-    function previewWithdraw1For0(
+
+    function previewDeposit0For1(
         uint32 vaultId,
         uint256 amount1
-    ) internal view returns (uint256 amount0, uint256 shareAmount, uint256 fee0, uint256 fee1) {
-        ALMVault storage vs = vaultId.getVault();
-        
-        if (amount1 == 0 || vs.totalSupply == 0) {
+    ) internal returns (uint256 amount0, uint256 mintShares, uint256 fee0, uint256 fee1) {
+        return _previewDeposit0For1(vaultId.getVault(), S.registry(), amount1);
+    }
+
+    // in wei
+    function _previewDeposit1For0(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 amount0
+    ) internal returns (uint256 amount1, uint256 mintShares, uint256 fee0, uint256 fee1) {
+        uint256 ratio1 = _targetRatio1(vs, registry);
+        if (amount0 == 0 || vs.totalSupply == 0 || ratio1 == 0) {
             return (0, 0, 0, 0);
         }
+        // cross product: amount1 = (ratio1 * amount0) / ratio0
+        amount1 = ratio1.mulDivDown(amount0, M.PRECISION_BP_BASIS - ratio1);
+        (mintShares, fee0, fee1) = _amountsToShares(vs, registry, amount0, amount1, FeeType.ENTRY);
+    }
 
-        // Calculate necessary share amount to withdraw this much token1
-        shareAmount = _amountToShares(vaultId, amount1, false, true);
-        
-        // Calculate corresponding token amounts including fees
-        uint256 totalAmount1;
-        (amount0, totalAmount1, fee0, fee1) = _sharesToAmounts(vaultId, shareAmount, true);
-        
-        // Double-check that we're getting the requested amount1 (minus fees)
-        if (totalAmount1 < amount1) {
-            // Adjust share amount up slightly to ensure the user gets at least the requested amount
-            shareAmount = shareAmount.mulDivUp(amount1, totalAmount1);
-            (amount0, totalAmount1, fee0, fee1) = _sharesToAmounts(vaultId, shareAmount, true);
+    function previewDeposit1For0(
+        uint32 vaultId,
+        uint256 amount0
+    ) internal returns (uint256 amount1, uint256 mintShares, uint256 fee0, uint256 fee1) {
+        return _previewDeposit1For0(vaultId.getVault(), S.registry(), amount0);
+    }
+
+    function _previewWithdraw(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 sharesBurnt
+    ) internal returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
+        return _sharesToAmounts(vs, registry, sharesBurnt, FeeType.EXIT);
+    }
+
+    function _previewWithdraw(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 amount0,
+        uint256 amount1
+    ) internal returns (uint256 sharesBurnt, uint256 fee0, uint256 fee1) {
+        return _amountsToShares(vs, registry, amount0, amount1, FeeType.EXIT);
+    }
+
+    function _previewWithdraw0For1(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 amount1
+    )
+        internal
+        returns (
+            uint256 amount0,
+            uint256 sharesBurnt,
+            uint256 fee0,
+            uint256 fee1
+        )
+    {
+        uint256 ratio0 = _targetRatio0(vs, registry);
+        if (amount1 == 0 || vs.totalSupply == 0 || ratio0 == 0) {
+            return (0, 0, 0, 0);
         }
+        // cross product: amount0 = (ratio0 * amount1) / ratio1
+        amount0 = ratio0.mulDivDown(amount1, M.PRECISION_BP_BASIS - ratio0);
+        (sharesBurnt, fee0, fee1) = _amountsToShares(vs, registry, amount0, amount1, FeeType.EXIT);
+    }
+
+    function previewWithdraw(
+        uint32 vaultId,
+        uint256 sharesAmount
+    ) internal returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
+        return _sharesToAmounts(vaultId.getVault(), S.registry(), sharesAmount, FeeType.EXIT);
+    }
+
+    function previewWithdraw(
+        uint32 vaultId,
+        uint256 amount0,
+        uint256 amount1
+    ) internal returns (uint256 sharesAmount, uint256 fee0, uint256 fee1) {
+        return _amountsToShares(vaultId.getVault(), S.registry(), amount0, amount1, FeeType.EXIT);
+    }
+
+    function previewWithdraw0For1(
+        uint32 vaultId,
+        uint256 amount1
+    )
+        internal
+        returns (
+            uint256 amount0,
+            uint256 sharesBurnt,
+            uint256 fee0,
+            uint256 fee1
+        )
+    {
+        ALMVault storage vs = vaultId.getVault();
+        return _previewWithdraw0For1(vs, S.registry(), amount1);
+    }
+
+    function _previewWithdraw1For0(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 amount0
+    ) internal returns (uint256 amount1, uint256 sharesBurnt, uint256 fee0, uint256 fee1) {
+        uint256 ratio1 = _targetRatio1(vs, registry);
+        if (amount0 == 0 || vs.totalSupply == 0 || ratio1 == 0) {
+            return (0, 0, 0, 0);
+        }
+        // cross product: amount1 = (ratio1 * amount0) / ratio0
+        amount1 = ratio1.mulDivDown(amount0, M.PRECISION_BP_BASIS - ratio1);
+        (sharesBurnt, fee0, fee1) = _amountsToShares(vs, registry, amount0, amount1, FeeType.EXIT);
+    }
+
+    function previewWithdraw1For0(
+        uint32 vaultId,
+        uint256 amount0
+    )
+        internal
+        returns (
+            uint256 amount1,
+            uint256 sharesBurnt,
+            uint256 fee0,
+            uint256 fee1
+        )
+    {
+        return _previewWithdraw1For0(vaultId.getVault(), S.registry(), amount0);
+    }
+
+    function _deposit(
+        ALMVault storage vs,
+        uint256 sharesMinted,
+        address receiver
+    ) internal returns (uint256 supply0, uint256 supply1, uint256 fee0, uint256 fee1) {
+        if (sharesMinted == 0) revert Errors.ZeroValue();
+
+        // Check that mint wouldn't exceed maxSupply
+        if (vs.totalSupply + sharesMinted > vs.maxSupply) {
+            revert Errors.Exceeds(vs.totalSupply + sharesMinted, vs.maxSupply);
+        }
+
+        // Preview how much of each token is needed and get fee info
+        (supply0, supply1, fee0, fee1) = _sharesToAmounts(vs, S.registry(), sharesMinted, FeeType.ENTRY);
+
+        // Execute deposit with calculated amounts
+        _mintShares(vs, supply0, supply1, fee0, fee1, sharesMinted, receiver);
+
+        return (supply0, supply1, fee0, fee1);
+    }
+
+    function _deposit(
+        ALMVault storage vs,
+        uint256 amount0,
+        uint256 amount1,
+        address receiver
+    ) internal returns (uint256 mintedShares, uint256 fee0, uint256 fee1) {
+        if (amount0 == 0 && amount1 == 0) revert Errors.ZeroValue();
+
+        // Preview how many shares will be minted and fee info
+        (mintedShares, fee0, fee1) = _amountsToShares(vs, S.registry(), amount0, amount1, FeeType.ENTRY);
         
-        return (amount0, shareAmount, fee0, fee1);
+        // Check that mint wouldn't exceed maxSupply
+        if (vs.totalSupply + mintedShares > vs.maxSupply) {
+            revert Errors.Exceeds(vs.totalSupply + mintedShares, vs.maxSupply);
+        }
+
+        // Execute deposit with the input amounts
+        _mintShares(vs, amount0, amount1, fee0, fee1, mintedShares, receiver);
+
+        return (mintedShares, fee0, fee1);
     }
 
     /**
-     * @notice Get vault information for external view
-     * @param vaultId The vault ID
-     * @return info The vault information
+     * @notice Common execution logic for deposits
+     * @param vs The vault storage
+     * @param amount0 The amount of token0 to deposit
+     * @param amount1 The amount of token1 to deposit
+     * @param fee0 The fee amount for token0
+     * @param fee1 The fee amount for token1
+     * @param sharesToMint The amount of shares to mint (after fee adjustments)
+     * @param receiver The address to receive the shares
      */
-    function getVaultInfo(uint32 vaultId) internal view returns (VaultInfo memory info) {
+    function _mintShares(
+        ALMVault storage vs,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 fee0,
+        uint256 fee1,
+        uint256 sharesToMint,
+        address receiver
+    ) internal {
+        // Transfer the exact amounts from user to contract
+        vs.token0.safeTransferFrom(msg.sender, address(this), amount0);
+        vs.token1.safeTransferFrom(msg.sender, address(this), amount1);
+
+        // Calculate adjusted mint amount after fees
+        uint256 adjustedMintAmount = sharesToMint;
+        if (vs.fees.entry > 0) {
+            // Add fees to pending fees
+            vs.pendingFees[vs.token0] += fee0;
+            vs.pendingFees[vs.token1] += fee1;
+
+            // Adjust share amount if this is a share-based deposit (not amount-based)
+            // For amount-based deposits the fee is already accounted for in mintedShares calculation
+            (uint256 sharesWithoutFee, , ) = _amountsToShares(vs, S.registry(), amount0, amount1, FeeType.NONE);
+            if (sharesToMint > sharesWithoutFee) {
+                adjustedMintAmount = sharesToMint.subBpDown(vs.fees.entry);
+            }
+        }
+
+        // Mint adjusted vault shares for the user
+        vs.id.mint(receiver, adjustedMintAmount);
+
+        emit Events.SharesMinted(receiver, adjustedMintAmount, amount0, amount1);
+    }
+
+    function deposit(
+        uint32 vaultId,
+        uint256 sharesMinted,
+        address receiver
+    ) internal returns (uint256 supply0, uint256 supply1, uint256 fee0, uint256 fee1) {
         ALMVault storage vs = vaultId.getVault();
+        return _deposit(vs, sharesMinted, receiver);
+    }
+
+    function deposit(
+        uint32 vaultId,
+        uint256 amount0,
+        uint256 amount1,
+        address receiver
+    ) internal returns (uint256 mintedShares, uint256 fee0, uint256 fee1) {
+        ALMVault storage vs = vaultId.getVault();
+        return _deposit(vs, amount0, amount1, receiver);
+    }
+
+    function _withdraw(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 sharesBurnt,
+        address receiver
+    ) internal returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
+        // Validate withdrawal parameters
+        _validateWithdrawal(vs, sharesBurnt);
+
+        // Preview how much of each token to withdraw and get fee info
+        (amount0, amount1, fee0, fee1) = _sharesToAmounts(vs, registry, sharesBurnt, FeeType.EXIT);
+
+        // Execute withdrawal with calculated amounts
+        _burnShares(
+            vs, 
+            registry, 
+            amount0, 
+            amount1, 
+            fee0, 
+            fee1, 
+            sharesBurnt, 
+            receiver, 
+            false
+        );
+    }
+
+    function _withdraw(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 amount0,
+        uint256 amount1,
+        address receiver
+    ) internal returns (uint256 sharesAmount, uint256 fee0, uint256 fee1) {
+        if (amount0 == 0 && amount1 == 0) revert Errors.ZeroValue();
+        if (vs.totalSupply == 0) revert Errors.ZeroValue();
+
+        // Preview how many shares to burn and fee info
+        (sharesAmount, fee0, fee1) = _amountsToShares(vs, registry, amount0, amount1, FeeType.EXIT);
         
-        info.id = vs.id;
-        info.name = vs.name;
-        info.symbol = vs.symbol;
-        info.decimals = vs.decimals;
-        info.totalSupply = vs.totalSupply;
-        info.maxSupply = vs.maxSupply;
-        
-        info.token0 = vs.token0;
-        info.token1 = vs.token1;
-        
-        // Copy ranges array
-        info.ranges = new Range[](vs.ranges.length);
-        for (uint256 i = 0; i < vs.ranges.length; i++) {
-            info.ranges[i] = vs.ranges[i];
+        // Validate the withdrawal
+        if (vs.totalSupply < sharesAmount) revert Errors.Exceeds(vs.totalSupply, sharesAmount); // supply breach
+        if (vs.id.balanceOf(msg.sender) < sharesAmount) revert Errors.BurnExceedsBalance(); // balance breach
+
+        // Execute withdrawal with the input amounts
+        _burnShares(
+            vs, 
+            registry, 
+            amount0, 
+            amount1, 
+            fee0, 
+            fee1, 
+            sharesAmount, 
+            receiver, 
+            true
+        );
+
+        return (sharesAmount, fee0, fee1);
+    }
+
+    /**
+     * @notice Validates basic withdrawal conditions
+     * @param vs The vault storage
+     * @param sharesBurnt The amount of shares to burn
+     */
+    function _validateWithdrawal(ALMVault storage vs, uint256 sharesBurnt) internal view {
+        if (sharesBurnt == 0 || vs.totalSupply == 0) revert Errors.ZeroValue();
+        if (vs.totalSupply < sharesBurnt) revert Errors.Exceeds(vs.totalSupply, sharesBurnt); // supply breach
+        if (vs.id.balanceOf(msg.sender) < sharesBurnt) revert Errors.BurnExceedsBalance(); // balance breach
+    }
+
+    /**
+     * @notice Common execution logic for withdrawals
+     * @param vs The vault storage
+     * @param registry The registry storage
+     * @param amount0 The amount of token0 to withdraw
+     * @param amount1 The amount of token1 to withdraw
+     * @param fee0 The fee amount for token0
+     * @param fee1 The fee amount for token1
+     * @param sharesBurnt The amount of shares to burn
+     * @param receiver The address to receive the tokens
+     * @param isAmountBased Whether this is an amount-based withdrawal
+     */
+    function _burnShares(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 fee0,
+        uint256 fee1,
+        uint256 sharesBurnt,
+        address receiver,
+        bool isAmountBased
+    ) internal {
+        // Burn the users' vault shares
+        vs.id.burn(msg.sender, sharesBurnt);
+
+        if (vs.fees.exit > 0) {
+            // Add exit fees to pending fees
+            vs.pendingFees[vs.token0] += fee0;
+            vs.pendingFees[vs.token1] += fee1;
+        }
+
+        // Burn underlying liquidity from ranges to free up tokens
+        uint256 totalLpFees0;
+        uint256 totalLpFees1;
+        // TODO: partial burn to meet user requirements and not the whole vault
+        (,,totalLpFees0, totalLpFees1) = _burnAllRanges(vs, S.registry());
+        _accrueFees(vs, registry, totalLpFees0, totalLpFees1);
+
+        // For amount-based withdrawals, adjust for fees
+        uint256 transferAmount0 = isAmountBased ? (amount0 - fee0) : amount0;
+        uint256 transferAmount1 = isAmountBased ? (amount1 - fee1) : amount1;
+
+        // Transfer retrieved tokens to the receiver
+        if (transferAmount0 + transferAmount1 > 0) {
+            vs.token0.safeTransfer(receiver, transferAmount0);
+            vs.token1.safeTransfer(receiver, transferAmount1);
+        }
+
+        emit Events.SharesBurnt(receiver, sharesBurnt, transferAmount0, transferAmount1);
+    }
+
+    function withdraw(
+        uint32 vaultId,
+        uint256 sharesBurnt,
+        address receiver
+    ) internal returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
+        ALMVault storage vs = vaultId.getVault();
+        return _withdraw(vs, S.registry(), sharesBurnt, receiver);
+    }
+
+    function withdraw(
+        uint32 vaultId,
+        uint256 amount0,
+        uint256 amount1,
+        address receiver
+    ) internal returns (uint256 sharesAmount, uint256 fee0, uint256 fee1) {
+        ALMVault storage vs = vaultId.getVault();
+        return _withdraw(vs, S.registry(), amount0, amount1, receiver);
+    }
+
+    function _accruePerformanceFees(
+        ALMVault storage vs,
+        uint256 lpFees0,
+        uint256 lpFees1
+    ) internal returns (uint256 perfFee0, uint256 perfFee1) {
+        if (vs.fees.perf > 0 && (lpFees0 + lpFees1 > 0)) {
+            perfFee0 = lpFees0.bpUp(vs.fees.perf);
+            perfFee1 = lpFees1.bpUp(vs.fees.perf);
+            vs.accruedFees[vs.token0] += perfFee0;
+            vs.accruedFees[vs.token1] += perfFee1;
+            vs.timePoints.perfAccruedAt = uint64(block.timestamp);
+        }
+    }
+
+    function _accrueManagementFees(
+        ALMVault storage vs,
+        Registry storage registry
+    ) internal returns (uint256 mgmtFee0, uint256 mgmtFee1) {
+        // Get current balances
+        (uint256 balance0, uint256 balance1) = _getTotalBalances(
+            vs,
+            registry
+        );
+
+        // Calculate elapsed time since last fee accrual
+        uint256 elapsed = block.timestamp - vs.timePoints.mgmtAccruedAt;
+        if (elapsed == 0) return (0, 0);
+
+        // Calculate pro-rated management fee for the elapsed period - round UP for protocol favor
+        uint256 durationBps = uint256(elapsed).mulDivUp(
+            M.PRECISION_BP_BASIS,
+            M.SEC_PER_YEAR
+        ); // in PRECISION_BP_BASIS
+
+        // Apply management fee rate to token balances - round UP for protocol favor
+        uint256 scaledRate = uint256(vs.fees.mgmt).mulDivUp(durationBps, M.BP_BASIS); // in PRECISION_BP_BASIS
+        mgmtFee0 = balance0.mulDivUp(scaledRate, M.PRECISION_BP_BASIS); // back to wei
+        mgmtFee1 = balance1.mulDivUp(scaledRate, M.PRECISION_BP_BASIS); // back to wei
+        vs.accruedFees[vs.token0] += mgmtFee0;
+        vs.accruedFees[vs.token1] += mgmtFee1;
+        vs.timePoints.mgmtAccruedAt = uint64(block.timestamp);
+    }
+
+    function _accrueFees(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 lpFees0,
+        uint256 lpFees1
+    ) internal returns (uint256 perfFees0, uint256 perfFees1, uint256 mgmtFees0, uint256 mgmtFees1) {
+        (perfFees0, perfFees1) = _accruePerformanceFees(vs, lpFees0, lpFees1);
+        (mgmtFees0, mgmtFees1) = _accrueManagementFees(vs, registry);
+    }
+
+    function _collectFees(
+        ALMVault storage vault,
+        address collector
+    ) internal returns (uint256 fees0, uint256 fees1) {
+        // Get the pending fees for this vault
+        fees0 = vault.pendingFees[vault.token0];
+        fees1 = vault.pendingFees[vault.token1];
+
+        // Reset pending fees
+        vault.pendingFees[vault.token0] = 0;
+        vault.pendingFees[vault.token1] = 0;
+
+        // Update accrued fees for this vault
+        vault.accruedFees[vault.token0] += fees0;
+        vault.accruedFees[vault.token1] += fees1;
+
+        // Transfer fees to the treasury
+        if (fees0 + fees1 > 0) {
+            vault.token0.safeTransfer(collector, fees0);
+            vault.token1.safeTransfer(collector, fees1);
+        }
+
+        // Update last fee collection timestamp
+        vault.timePoints.collectedAt = uint64(block.timestamp);
+        emit Events.FeesCollected(vault.id, address(vault.token0), address(vault.token1), fees0, fees1);
+    }
+
+    function collectFees(
+        uint32 vaultId
+    ) internal returns (uint256 fees0, uint256 fees1) {
+        return _collectFees(vaultId.getVault(), S.treasury().treasury);
+    }
+
+    function _processSwap(address router, bytes memory swapData) internal {
+        // Execute swap through the router
+        (bool success, ) = router.delegatecall(swapData);
+        if (!success) revert Errors.SwapFailed();
+    }
+
+    function rebalance(
+        uint32 vaultId,
+        Rebalance memory rebalanceData
+    ) internal returns (uint256 protocolFees0, uint256 protocolFees1) {
+        ALMVault storage vs = vaultId.getVault();
+        Registry storage registry = S.registry();
+
+        // Ensure vault is not paused
+        if (vs.paused) revert Errors.Paused(ErrorType.VAULT);
+
+        return _rebalance(vs, registry, rebalanceData);
+    }
+
+    function _rebalance(
+        ALMVault storage vs,
+        Registry storage registry,
+        Rebalance memory rebalanceData
+    ) internal returns (uint256 protocolFees0, uint256 protocolFees1) {
+        // Initialize tracking variables
+        (uint256 totalAmount0, uint256 totalAmount1, uint256 totalLpFees0, uint256 totalLpFees1) = _burnAllRanges(vs, rebalanceData);
+        _accrueFees(vs, registry, totalLpFees0, totalLpFees1);
+        _processSwaps(rebalanceData); // swaps are processed before new ranges are minted
+        _mintRanges(vs, rebalanceData);
+        return (protocolFees0, protocolFees1);
+    }
+
+    function _burnRange(
+        ALMVault storage vs,
+        Registry storage registry,
+        uint256 index
+    ) internal returns (uint256 amount0, uint256 amount1, uint256 lpFees0, uint256 lpFees1) {
+        Range memory range = registry.ranges[vs.ranges[index]];
+        address adapterAddress = _getPoolDexAdapter(registry, range.poolId);
+        if (range.liquidity > 0) {
+            (bool success, bytes memory data) = adapterAddress.delegatecall(
+                abi.encodeWithSelector(DEXAdapterFacet.burnRange.selector, range.id)
+            );
+            if (!success) revert Errors.DelegateCallFailed();
+            // Extract withdrawn amounts and LP fees
+            (amount0, amount1, lpFees0, lpFees1) = abi.decode(
+                data,
+                (uint256, uint256, uint256, uint256)
+            );
+        }
+        delete registry.ranges[range.id];
+        registry.rangeCount--;
+        // swap and pop to save gas
+        if (index < vs.ranges.length - 1) {
+            vs.ranges[index] = vs.ranges[vs.ranges.length - 1];
+        }
+        vs.ranges.pop();
+        return (amount0, amount1, lpFees0, lpFees1);
+    }
+
+    function _processSwaps(Rebalance memory rebalanceData) internal {
+        // Process all swaps in the rebalance data
+        uint256 swapLength = rebalanceData.swapRouters.length;
+        unchecked {
+            for (uint256 i = 0; i < swapLength; ++i) {
+                _processSwap(rebalanceData.swapRouters[i], rebalanceData.swapData[i]);
+            }
+        }
+    }
+
+    function _processMints(
+        ALMVault storage vs,
+        Rebalance memory rebalanceData
+    ) internal {
+        // Process mints
+        uint256 mintLength = rebalanceData.ranges.length;
+
+        for (uint256 i = 0; i < mintLength; ++i) {
+            _processMintRange(vs, rebalanceData.ranges[i]);
+        }
+    }
+
+    function _processMintRange(
+        ALMVault storage vs,
+        Range memory range
+    ) internal {
+        // Ensure vaultId is set
+        range.vaultId = vs.id;
+
+        if (range.id == bytes32(0)) {
+            // Generate a new rangeId based on vault, pool, and ticks
+            range.id = keccak256(
+                abi.encodePacked(
+                    vs.id,
+                    range.poolId,
+                    range.lowerTick,
+                    range.upperTick
+                )
+            );
         }
         
-        info.feesCollectedAt = vs.feesCollectedAt;
-        info.feeAccruedAt = vs.feeAccruedAt;
-        info.fees = vs.fees;
-        info.initAmount0 = vs.initAmount0;
-        info.initAmount1 = vs.initAmount1;
-        info.initShares = vs.initShares;
+        bytes32 rangeId = range.id;
+        Registry storage registry = S.registry();
         
-        info.lookback = vs.lookback;
-        info.maxDeviation = vs.maxDeviation;
-        
-        info.paused = vs.paused;
-        info.restrictedMint = vs.restrictedMint;
-        
-        return info;
+        // Get the DEX adapter for this pool
+        address adapterAddress = _getPoolDexAdapter(registry, range.poolId);
+
+        // Store range in protocol-level mapping for future lookups
+        registry.ranges[rangeId] = range;
+
+        // Also add to backward-compatible array
+        vs.ranges.push(rangeId);
+
+        // Execute delegate call to mint liquidity
+        (bool success, bytes memory data) = adapterAddress.delegatecall(
+            abi.encodeWithSelector(DEXAdapterFacet.mintRange.selector, rangeId)
+        );
+        if (!success) revert Errors.DelegateCallFailed();
+
+        // Update the range with the liquidity amount
+        Range storage storedRange = registry.ranges[rangeId];
+        (storedRange.liquidity, , ) = abi.decode(data, (uint128, uint256, uint256));
+    }
+
+    function _previewWithdraw(
+        ALMVault storage vs,
+        uint256 sharesBurnt
+    ) internal returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
+        return _sharesToAmounts(vs, S.registry(), sharesBurnt, FeeType.EXIT);
+    }
+
+    function _mintRanges(
+        ALMVault storage vs,
+        Rebalance memory rebalanceData
+    ) internal {
+        // Process mints
+        uint256 mintLength = rebalanceData.ranges.length;
+
+        for (uint256 i = 0; i < mintLength; ++i) {
+            _processMintRange(vs, rebalanceData.ranges[i]);
+        }
     }
 }

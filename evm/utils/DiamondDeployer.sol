@@ -443,14 +443,12 @@ contract DiamondDeployer {
     }
 
     function generateSwapperSelectors() internal pure returns (bytes4[] memory) {
-        bytes4[] memory selectors = new bytes4[](5);
+        bytes4[] memory selectors = new bytes4[](3);
         
-        bytes4[5] memory selectorValues = [
+        bytes4[3] memory selectorValues = [
             SwapperFacet.swap.selector,
             SwapperFacet.decodeAndSwap.selector,
-            SwapperFacet.decodeAndSwapBalance.selector,
-            SwapperFacet.multiSwap.selector,
-            SwapperFacet.multiSwapBalances.selector
+            SwapperFacet.decodeAndSwapBalance.selector
         ];
         
         for (uint i = 0; i < selectorValues.length;) {

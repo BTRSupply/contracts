@@ -5,12 +5,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {LibDiamond} from "@libraries/LibDiamond.sol";
 import {LibAccessControl} from "@libraries/LibAccessControl.sol";
-import {LibSwapper} from "@libraries/LibSwapper.sol";
+import {LibSwapper as SW} from "@libraries/LibSwapper.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {PermissionedFacet} from "@facets/abstract/PermissionedFacet.sol";
 import {LibRescue} from "@libraries/LibRescue.sol";
 import {LibManagement as M} from "@libraries/LibManagement.sol";
-import {LibBitMask} from "@libraries/LibBitMask.sol";
 import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 import {AccountStatus as AS} from "@/BTRTypes.sol";
 
@@ -20,129 +19,12 @@ import {AccountStatus as AS} from "@/BTRTypes.sol";
 contract SwapperFacet is PermissionedFacet {
     using SafeERC20 for IERC20;
     using LibAccessControl for bytes32;
-    using LibSwapper for bool;
-    using LibSwapper for address;
     using LibRescue for address;
-
-    /*═══════════════════════════════════════════════════════════════╗
-    ║                       CONFIGURATION                            ║
-    ╚═══════════════════════════════════════════════════════════════*/
-
-    /// @notice Initialize the Swapper with default settings
-    /// @param _restrictCaller Whether to restrict callers
-    /// @param _restrictRouter Whether to restrict routers 
-    /// @param _approveMax Whether to approve max amount
-    function initialize(
-        bool _restrictCaller,
-        bool _restrictRouter,
-        bool _approveMax
-    ) external onlyAdmin {
-        LibSwapper.initialize(_restrictCaller, _restrictRouter, _approveMax);
-    }
-
-    /// @notice Sets caller restriction flag
-    /// @param _restrictCaller Flag value (true to restrict, false to allow all)
-    function setCallerRestriction(bool _restrictCaller) external onlyAdmin {
-        _restrictCaller.setCallerRestriction();
-    }
-
-    /// @notice Sets router restriction flag
-    /// @param _restrictRouter Flag value (true to restrict, false to allow all)
-    function setRouterRestriction(bool _restrictRouter) external onlyAdmin {
-        _restrictRouter.setRouterRestriction();
-    }
-
-    /// @notice Sets input token restriction flag
-    /// @param _value Flag value (true to restrict, false to allow all)
-    function setInputRestriction(bool _value) external onlyAdmin {
-        _value.setInputRestriction();
-    }
-
-    /// @notice Sets output token restriction flag
-    /// @param _restrictOutput Flag value (true to restrict, false to allow all)
-    function setOutputRestriction(bool _restrictOutput) external onlyAdmin {
-        _restrictOutput.setOutputRestriction();
-    }
-
-    /// @notice Sets approve max flag
-    /// @param _approveMax Flag value (true to approve max, false to approve exact amount)
-    function setApproveMax(bool _approveMax) external onlyAdmin {
-        _approveMax.setApproveMax();
-    }
-
-    /// @notice Sets auto revoke flag
-    /// @param _autoRevoke Flag value (true to auto revoke, false to keep approval)
-    function setAutoRevoke(bool _autoRevoke) external onlyAdmin {
-        _autoRevoke.setAutoRevoke();
-    }
-
-    /// @notice Adds an address to the whitelist
-    /// @param _address Address to whitelist
-    function addToWhitelist(address _address) external onlyAdmin {
-        M.setAccountStatus(_address, AS.WHITELISTED);
-    }
-
-    /// @notice Removes an address from the whitelist
-    /// @param _address Address to remove from whitelist
-    function removeFromWhitelist(address _address) external onlyAdmin {
-        M.setAccountStatus(_address, AS.NONE);
-    }
-
-    /*═══════════════════════════════════════════════════════════════╗
-    ║                           VIEWS                                ║
-    ╚═══════════════════════════════════════════════════════════════*/
-    
-    /// @notice Checks if an address is whitelisted
-    /// @param _address Address to check
-    /// @return Whether the address is whitelisted
-    function isWhitelisted(address _address) external view returns (bool) {
-        return M.getAccountStatus(_address) == AS.WHITELISTED;
-    }
-
-    /// @notice Checks if a caller is restricted
-    /// @param _caller Address to check
-    /// @return Whether the caller is restricted
-    function isCallerRestricted(address _caller) external view returns (bool) {
-        return LibSwapper.isCallerRestricted(_caller);
-    }
-
-    /// @notice Checks if a router is restricted
-    /// @param _router Address to check
-    /// @return Whether the router is restricted
-    function isRouterRestricted(address _router) external view returns (bool) {
-        return LibSwapper.isRouterRestricted(_router);
-    }
-
-    /// @notice Checks if an input token is restricted
-    /// @param _input Address to check
-    /// @return Whether the input token is restricted
-    function isInputRestricted(address _input) external view returns (bool) {
-        return LibSwapper.isInputRestricted(_input);
-    }
-
-    /// @notice Checks if an output token is restricted
-    /// @param _output Address to check
-    /// @return Whether the output token is restricted
-    function isOutputRestricted(address _output) external view returns (bool) {
-        return LibSwapper.isOutputRestricted(_output);
-    }
-
-    /// @notice Checks if should approve max amount
-    /// @return Whether to approve max amount
-    function isApproveMax() external view returns (bool) {
-        return LibSwapper.isApproveMax();
-    }
-
-    /// @notice Checks if should auto revoke approvals
-    /// @return Whether to auto revoke approvals
-    function isAutoRevoke() external view returns (bool) {
-        return LibSwapper.isAutoRevoke();
-    }
 
     /*═══════════════════════════════════════════════════════════════╗
     ║                          SWAP FUNCTIONS                        ║
     ╚═══════════════════════════════════════════════════════════════*/
-    
+
     /// @notice Executes a single swap
     /// @param _input Address of the input token
     /// @param _output Address of the output token
@@ -160,7 +42,7 @@ contract SwapperFacet is PermissionedFacet {
         address _targetRouter,
         bytes calldata _callData
     ) external returns (uint256 received, uint256 spent) {
-        return LibSwapper.executeSwap(
+        return SW.swap(
             _input,
             _output,
             _amountIn,
@@ -186,13 +68,9 @@ contract SwapperFacet is PermissionedFacet {
         address _targetRouter,
         bytes calldata _callData
     ) external returns (uint256 received, uint256 spent) {
-        uint256 balance = IERC20(_input).balanceOf(msg.sender);
-        if (balance == 0) revert Errors.ZeroValue();
-        
-        return LibSwapper.executeSwap(
+        return SW.swapBalance(
             _input,
             _output,
-            balance,
             _minAmountOut,
             _targetRouter,
             _callData,
@@ -213,19 +91,11 @@ contract SwapperFacet is PermissionedFacet {
         uint256 _amount,
         bytes memory _params
     ) external returns (uint256 received, uint256 spent) {
-        (
-            address targetRouter,
-            uint256 minAmountOut,
-            bytes memory callData
-        ) = LibSwapper.decodeSwapParams(_params);
-
-        return LibSwapper.executeSwap(
+        return SW.decodeAndSwap(
             _input,
             _output,
             _amount,
-            minAmountOut,
-            targetRouter,
-            callData,
+            _params,
             msg.sender
         );
     }
@@ -241,199 +111,11 @@ contract SwapperFacet is PermissionedFacet {
         address _output,
         bytes memory _params
     ) external returns (uint256 received, uint256 spent) {
-        uint256 balance = IERC20(_input).balanceOf(msg.sender);
-        if (balance == 0) revert Errors.ZeroValue();
-        
-        (
-            address targetRouter,
-            uint256 minAmountOut,
-            bytes memory callData
-        ) = LibSwapper.decodeSwapParams(_params);
-
-        return LibSwapper.executeSwap(
+        return SW.decodeAndSwapBalance(
             _input,
             _output,
-            balance,
-            minAmountOut,
-            targetRouter,
-            callData,
+            _params,
             msg.sender
         );
-    }
-
-    /// @notice Executes multiple swaps
-    /// @param _inputs Array of input token addresses
-    /// @param _outputs Array of output token addresses
-    /// @param _amountsIn Array of input token amounts
-    /// @param _minAmountsOut Array of minimum output token amounts
-    /// @param _targetRouters Array of router addresses
-    /// @param _callDatas Array of encoded routing data
-    /// @return received Array of output token amounts received
-    /// @return spent Array of input token amounts spent
-    function multiSwap(
-        address[] memory _inputs,
-        address[] memory _outputs,
-        uint256[] memory _amountsIn,
-        uint256[] memory _minAmountsOut,
-        address[] memory _targetRouters,
-        bytes[] memory _callDatas
-    ) external returns (uint256[] memory received, uint256[] memory spent) {
-        if (_inputs.length == 0 ||
-            _inputs.length != _outputs.length ||
-            _inputs.length != _amountsIn.length ||
-            _inputs.length != _minAmountsOut.length ||
-            _inputs.length != _targetRouters.length ||
-            _inputs.length != _callDatas.length) {
-            revert Errors.InvalidParameter();
-        }
-        
-        uint256 length = _inputs.length;
-        received = new uint256[](length);
-        spent = new uint256[](length);
-        
-        for (uint256 i = 0; i < length; i++) {
-            (received[i], spent[i]) = LibSwapper.executeSwap(
-                _inputs[i],
-                _outputs[i],
-                _amountsIn[i],
-                _minAmountsOut[i],
-                _targetRouters[i],
-                _callDatas[i],
-                msg.sender
-            );
-        }
-    }
-
-    /// @notice Executes multiple swaps using entire balances
-    /// @param _inputs Array of input token addresses
-    /// @param _outputs Array of output token addresses
-    /// @param _minAmountsOut Array of minimum output token amounts
-    /// @param _targetRouters Array of router addresses
-    /// @param _callDatas Array of encoded routing data
-    /// @return received Array of output token amounts received
-    /// @return spent Array of input token amounts spent
-    function multiSwapBalances(
-        address[] memory _inputs,
-        address[] memory _outputs,
-        uint256[] memory _minAmountsOut,
-        address[] memory _targetRouters,
-        bytes[] memory _callDatas
-    ) external returns (uint256[] memory received, uint256[] memory spent) {
-        if (_inputs.length == 0 ||
-            _inputs.length != _outputs.length ||
-            _inputs.length != _minAmountsOut.length ||
-            _inputs.length != _targetRouters.length ||
-            _inputs.length != _callDatas.length) {
-            revert Errors.InvalidParameter();
-        }
-        
-        uint256 length = _inputs.length;
-        received = new uint256[](length);
-        spent = new uint256[](length);
-        
-        for (uint256 i = 0; i < length; i++) {
-            uint256 balance = IERC20(_inputs[i]).balanceOf(msg.sender);
-            if (balance == 0) {
-                continue;
-            }
-            
-            (received[i], spent[i]) = LibSwapper.executeSwap(
-                _inputs[i],
-                _outputs[i],
-                balance,
-                _minAmountsOut[i],
-                _targetRouters[i],
-                _callDatas[i],
-                msg.sender
-            );
-        }
-    }
-
-    /// @notice Executes multiple swaps with encoded parameters
-    /// @param _inputs Array of input token addresses
-    /// @param _outputs Array of output token addresses
-    /// @param _amountsIn Array of input token amounts
-    /// @param _params Array of encoded swap parameters
-    /// @return received Array of output token amounts received
-    /// @return spent Array of input token amounts spent
-    function decodeAndMultiSwap(
-        address[] memory _inputs,
-        address[] memory _outputs,
-        uint256[] memory _amountsIn,
-        bytes[] memory _params
-    ) external returns (uint256[] memory received, uint256[] memory spent) {
-        if (_inputs.length == 0 ||
-            _inputs.length != _outputs.length ||
-            _inputs.length != _amountsIn.length ||
-            _inputs.length != _params.length) {
-            revert Errors.InvalidParameter();
-        }
-        
-        uint256 length = _inputs.length;
-        received = new uint256[](length);
-        spent = new uint256[](length);
-        
-        for (uint256 i = 0; i < length; i++) {
-            (
-                address targetRouter,
-                uint256 minAmountOut,
-                bytes memory callData
-            ) = LibSwapper.decodeSwapParams(_params[i]);
-            
-            (received[i], spent[i]) = LibSwapper.executeSwap(
-                _inputs[i],
-                _outputs[i],
-                _amountsIn[i],
-                minAmountOut,
-                targetRouter,
-                callData,
-                msg.sender
-            );
-        }
-    }
-
-    /// @notice Executes multiple swaps using entire balances with encoded parameters
-    /// @param _inputs Array of input token addresses
-    /// @param _outputs Array of output token addresses
-    /// @param _params Array of encoded swap parameters
-    /// @return received Array of output token amounts received
-    /// @return spent Array of input token amounts spent
-    function decodeAndMultiSwapBalances(
-        address[] memory _inputs,
-        address[] memory _outputs,
-        bytes[] memory _params
-    ) external returns (uint256[] memory received, uint256[] memory spent) {
-        if (_inputs.length == 0 ||
-            _inputs.length != _outputs.length ||
-            _inputs.length != _params.length) {
-            revert Errors.InvalidParameter();
-        }
-        
-        uint256 length = _inputs.length;
-        received = new uint256[](length);
-        spent = new uint256[](length);
-        
-        for (uint256 i = 0; i < length; i++) {
-            uint256 balance = IERC20(_inputs[i]).balanceOf(msg.sender);
-            if (balance == 0) {
-                continue;
-            }
-            
-            (
-                address targetRouter,
-                uint256 minAmountOut,
-                bytes memory callData
-            ) = LibSwapper.decodeSwapParams(_params[i]);
-            
-            (received[i], spent[i]) = LibSwapper.executeSwap(
-                _inputs[i],
-                _outputs[i],
-                balance,
-                minAmountOut,
-                targetRouter,
-                callData,
-                msg.sender
-            );
-        }
     }
 }

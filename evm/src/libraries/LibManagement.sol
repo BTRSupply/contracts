@@ -8,11 +8,13 @@ import {BTRUtils} from "@libraries/BTRUtils.sol";
 import {LibAccessControl as AC} from "@libraries/LibAccessControl.sol";
 import {LibPausable as P} from "@libraries/LibPausable.sol";
 import {LibMaths as M} from "@libraries/LibMaths.sol";
-import {AccountStatus as AS, AddressType, ErrorType, Fees, CoreStorage, ALMVault, Oracles} from "@/BTRTypes.sol";
+import {AccountStatus as AS, AddressType, ErrorType, Fees, CoreStorage, ALMVault, Oracles, Range, Registry} from "@/BTRTypes.sol";
+import {LibBitMask} from "@libraries/LibBitMask.sol";
 
 library LibManagement {
 
     using BTRUtils for uint32;
+    using LibBitMask for uint256;
 
     /*═══════════════════════════════════════════════════════════════╗
     ║                           CONSTANTS                            ║
@@ -29,6 +31,17 @@ library LibManagement {
     uint32 internal constant MAX_TWAP_INTERVAL = 3600 * 24 * 7; // 7 days
     uint256 internal constant MAX_PRICE_DEVIATION = M.BP_BASIS / 3; // 33.33%
     uint256 internal constant MIN_PRICE_DEVIATION = 2; // 0.02%
+
+    // Restriction bit positions
+    uint8 internal constant RESTRICT_SWAP_CALLER_BIT = 0;
+    uint8 internal constant RESTRICT_SWAP_ROUTER_BIT = 1;
+    uint8 internal constant RESTRICT_SWAP_INPUT_BIT = 2;
+    uint8 internal constant RESTRICT_SWAP_OUTPUT_BIT = 3;
+    uint8 internal constant RESTRICT_BRIDGE_INPUT_BIT = 4;
+    uint8 internal constant RESTRICT_BRIDGE_OUTPUT_BIT = 5;
+    uint8 internal constant RESTRICT_BRIDGE_ROUTER_BIT = 6;
+    uint8 internal constant APPROVE_MAX_BIT = 7;
+    uint8 internal constant AUTO_REVOKE_BIT = 8;
 
     /*═══════════════════════════════════════════════════════════════╗
     ║                             PAUSE                              ║
@@ -239,10 +252,13 @@ library LibManagement {
             revert Errors.UnexpectedOutput();
         }
 
+        Registry storage rs = S.registry();
+
         uint256 totalWeight;
         for (uint256 i = 0; i < weights.length;) {
             totalWeight += weights[i];
-            vs.ranges[i].weightBps = weights[i];
+            Range storage range = rs.ranges[vs.ranges[i]];
+            range.weightBps = weights[i];
             unchecked { ++i; }
         }
 
@@ -304,5 +320,118 @@ library LibManagement {
         vs.lookback = lookback;
         vs.maxDeviation = maxDeviation;
         emit Events.VaultPriceProtectionUpdated(vaultId, lookback, maxDeviation);
+    }
+
+    /*═══════════════════════════════════════════════════════════════╗
+    ║                        RESTRICTION MANAGEMENT                  ║
+    ╚═══════════════════════════════════════════════════════════════*/
+
+    function getRestrictions() internal view returns (uint256) {
+        return S.restrictions().restrictionMask;
+    }
+
+    function setRestriction(uint8 _bit, bool _value) internal {
+        uint256 restrictions = S.restrictions().restrictionMask;
+        S.restrictions().restrictionMask = _value 
+            ? restrictions.setBit(_bit)
+            : restrictions.resetBit(_bit);
+        emit Events.RestrictionUpdated(_bit, _value);
+    }
+
+    function setSwapCallerRestriction(bool _value) internal {
+        setRestriction(RESTRICT_SWAP_CALLER_BIT, _value);
+    }
+
+    function setSwapRouterRestriction(bool _value) internal {
+        setRestriction(RESTRICT_SWAP_ROUTER_BIT, _value);
+    }
+
+    function setSwapInputRestriction(bool _value) internal {
+        setRestriction(RESTRICT_SWAP_INPUT_BIT, _value);
+    }
+
+    function setSwapOutputRestriction(bool _value) internal {
+        setRestriction(RESTRICT_SWAP_OUTPUT_BIT, _value);
+    }
+
+    function setBridgeInputRestriction(bool _value) internal {
+        setRestriction(RESTRICT_BRIDGE_INPUT_BIT, _value);
+    }
+
+    function setBridgeOutputRestriction(bool _value) internal {
+        setRestriction(RESTRICT_BRIDGE_OUTPUT_BIT, _value);
+    }
+
+    function setBridgeRouterRestriction(bool _value) internal {
+        setRestriction(RESTRICT_BRIDGE_ROUTER_BIT, _value);
+    }
+
+    function setApproveMax(bool _value) internal {
+        setRestriction(APPROVE_MAX_BIT, _value);
+    }
+
+    function setAutoRevoke(bool _value) internal {
+        setRestriction(AUTO_REVOKE_BIT, _value);
+    }
+
+    /*═══════════════════════════════════════════════════════════════╗
+    ║                        RESTRICTION CHECKS                      ║
+    ╚═══════════════════════════════════════════════════════════════*/
+
+    function isRestricted(uint8 _bit, address _address) internal view returns (bool) {
+        return getRestrictions().getBit(_bit) && !isWhitelisted(_address);
+    }
+
+    function isSwapCallerRestricted(address _caller) internal view returns (bool) {
+        return isRestricted(RESTRICT_SWAP_CALLER_BIT, _caller);
+    }
+
+    function isSwapRouterRestricted(address _router) internal view returns (bool) {
+        return isRestricted(RESTRICT_SWAP_ROUTER_BIT, _router);
+    }
+
+    function isSwapInputRestricted(address _input) internal view returns (bool) {
+        return isRestricted(RESTRICT_SWAP_INPUT_BIT, _input);
+    }
+
+    function isSwapOutputRestricted(address _output) internal view returns (bool) {
+        return isRestricted(RESTRICT_SWAP_OUTPUT_BIT, _output);
+    }
+
+    function isBridgeInputRestricted(address _input) internal view returns (bool) {
+        return isRestricted(RESTRICT_BRIDGE_INPUT_BIT, _input);
+    }
+
+    function isBridgeOutputRestricted(address _output) internal view returns (bool) {
+        return isRestricted(RESTRICT_BRIDGE_OUTPUT_BIT, _output);
+    }
+
+    function isBridgeRouterRestricted(address _router) internal view returns (bool) {
+        return isRestricted(RESTRICT_BRIDGE_ROUTER_BIT, _router);
+    }
+
+    function isApproveMax() internal view returns (bool) {
+        return getRestrictions().getBit(APPROVE_MAX_BIT);
+    }
+
+    function isAutoRevoke() internal view returns (bool) {
+        return getRestrictions().getBit(AUTO_REVOKE_BIT);
+    }
+
+    function initializeRestrictions(
+        bool _restrictSwapCaller,
+        bool _restrictSwapRouter,
+        bool _approveMax,
+        bool _autoRevoke
+    ) internal {
+        uint256 restrictions = 0;
+        if (_restrictSwapCaller) restrictions = restrictions.setBit(RESTRICT_SWAP_CALLER_BIT);
+        if (_restrictSwapRouter) restrictions = restrictions.setBit(RESTRICT_SWAP_ROUTER_BIT);
+        if (_approveMax) restrictions = restrictions.setBit(APPROVE_MAX_BIT);
+        if (_autoRevoke) restrictions = restrictions.setBit(AUTO_REVOKE_BIT);
+        S.restrictions().restrictionMask = restrictions;
+        
+        // Emit single initialization event
+        emit Events.RestrictionsInitialized(_restrictSwapCaller, _restrictSwapRouter, _approveMax, _autoRevoke);
     }
 }

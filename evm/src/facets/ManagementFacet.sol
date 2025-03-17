@@ -128,6 +128,100 @@ contract ManagementFacet is PermissionedFacet, PausableFacet, NonReentrantFacet 
     }
 
     /*═══════════════════════════════════════════════════════════════╗
+    ║                     RESTRICTION MANAGEMENT                     ║
+    ╚═══════════════════════════════════════════════════════════════*/
+
+    function setRestriction(uint8 bit, bool value) external onlyManager {
+        M.setRestriction(bit, value);
+    }
+
+    function setSwapCallerRestriction(bool value) external onlyManager {
+        M.setSwapCallerRestriction(value);
+    }
+
+    function setSwapRouterRestriction(bool value) external onlyManager {
+        M.setSwapRouterRestriction(value);
+    }
+
+    function setSwapInputRestriction(bool value) external onlyManager {
+        M.setSwapInputRestriction(value);
+    }
+
+    function setSwapOutputRestriction(bool value) external onlyManager {
+        M.setSwapOutputRestriction(value);
+    }
+
+    function setBridgeInputRestriction(bool value) external onlyManager {
+        M.setBridgeInputRestriction(value);
+    }
+
+    function setBridgeOutputRestriction(bool value) external onlyManager {
+        M.setBridgeOutputRestriction(value);
+    }
+
+    function setBridgeRouterRestriction(bool value) external onlyManager {
+        M.setBridgeRouterRestriction(value);
+    }
+
+    function setApproveMax(bool value) external onlyManager {
+        M.setApproveMax(value);
+    }
+
+    function setAutoRevoke(bool value) external onlyManager {
+        M.setAutoRevoke(value);
+    }
+
+    function isSwapCallerRestricted(address caller) external view returns (bool) {
+        return M.isSwapCallerRestricted(caller);
+    }
+
+    function isSwapRouterRestricted(address router) external view returns (bool) {
+        return M.isSwapRouterRestricted(router);
+    }
+
+    function isSwapInputRestricted(address input) external view returns (bool) {
+        return M.isSwapInputRestricted(input);
+    }
+
+    function isSwapOutputRestricted(address output) external view returns (bool) {
+        return M.isSwapOutputRestricted(output);
+    }
+
+    function isBridgeInputRestricted(address input) external view returns (bool) {
+        return M.isBridgeInputRestricted(input);
+    }
+
+    function isBridgeOutputRestricted(address output) external view returns (bool) {
+        return M.isBridgeOutputRestricted(output);
+    }
+
+    function isBridgeRouterRestricted(address router) external view returns (bool) {
+        return M.isBridgeRouterRestricted(router);
+    }
+
+    function isApproveMax() external view returns (bool) {
+        return M.isApproveMax();
+    }
+
+    function isAutoRevoke() external view returns (bool) {
+        return M.isAutoRevoke();
+    }
+
+    function initializeRestrictions(
+        bool restrictSwapCaller,
+        bool restrictSwapRouter,
+        bool approveMax,
+        bool autoRevoke
+    ) external onlyAdmin {
+        M.initializeRestrictions(
+            restrictSwapCaller,
+            restrictSwapRouter,
+            approveMax,
+            autoRevoke
+        );
+    }
+
+    /*═══════════════════════════════════════════════════════════════╗
     ║                            RANGES                              ║
     ╚═══════════════════════════════════════════════════════════════*/
 

@@ -39,7 +39,7 @@ library BTRErrors {
   error SlippageTooHigh();
   error StalePrice();
 
-  // ERC20 errors - keeping these as they are standard
+  // ERC20/ERC1155 errors - keeping these as they are standard
   error TransferExceedsBalance();
   error InsufficientAllowance();
   error BurnExceedsBalance();
@@ -59,8 +59,8 @@ library BTREvents {
 
   // Core operation events
   event VaultCreated(uint32 indexed vaultId, address indexed creator, VaultInitParams params);
-  event Minted(address indexed receiver, uint256 mintAmount, uint256 amount0, uint256 amount1);
-  event Burnt(address indexed receiver, uint256 burnAmount, uint256 amount0, uint256 amount1);
+  event SharesMinted(address indexed receiver, uint256 mintAmount, uint256 amount0, uint256 amount1);
+  event SharesBurnt(address indexed receiver, uint256 burnAmount, uint256 amount0, uint256 amount1);
   event PositionsBurned(address indexed user, uint256 amount0, uint256 amount1);
   event RebalanceExecuted(Rebalance rebalanceParams, uint256 balance0After, uint256 balance1After);
   event EmergencyWithdrawal(address token, uint256 amount, address owner);
@@ -90,8 +90,8 @@ library BTREvents {
   event Withdraw(address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares);
 
   // Position management events
-  event PositionMinted(bytes32 indexed rangeId, int24 lowerTick, int24 upperTick, uint128 liquidity, uint256 amount0, uint256 amount1);
-  event PositionBurnt(bytes32 indexed rangeId, int24 lowerTick, int24 upperTick, uint128 liquidity, uint256 burn0, uint256 burn1, uint256 fee0, uint256 fee1);
+  event RangeMinted(bytes32 indexed rangeId, uint128 liquidity, uint256 amount0, uint256 amount1);
+  event RangeBurnt(bytes32 indexed rangeId, uint128 liquidity, uint256 burn0, uint256 burn1, uint256 fee0, uint256 fee1);
   event RangeAdded(bytes32 indexed poolId, int24 lowerTick, int24 upperTick, DEX dex);
   event RangeRemoved(bytes32 indexed poolId, int24 lowerTick, int24 upperTick, DEX dex);
 
@@ -122,8 +122,11 @@ library BTREvents {
 
   // Swapper events
   event Swapped(address indexed user, address indexed assetIn, address indexed assetOut, uint256 amountIn, uint256 amountOut);
-  event SwapRestrictionUpdated(uint8 indexed restrictionType, bool enabled);
-  event SwapperInitialized(bool restrictCaller, bool restrictRouter, bool approveMax);
+  event SwapperInitialized(bool restrictSwapCaller, bool restrictSwapRouter, bool approveMax, bool autoRevoke);
+  
+  // Restriction management events
+  event RestrictionUpdated(uint8 indexed restrictionType, bool enabled);
+  event RestrictionsInitialized(bool restrictSwapCaller, bool restrictSwapRouter, bool approveMax, bool autoRevoke);
   
   // TWAP protection events
   event DefaultPriceProtectionUpdated(uint32 lookback, uint256 maxDeviation);

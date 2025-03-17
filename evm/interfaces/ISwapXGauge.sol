@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 // includes IBribe
 interface ISwapXGauge {
     function _deposit(uint amount, uint tokenId) external;
-    function _burnPosition(uint amount, uint tokenId) external;
+    function _burn(uint amount, uint tokenId) external;
     function getRewardForOwner(uint tokenId, address[] memory tokens) external;
     function getRewardForAddress(address _owner, address[] memory tokens) external;
     function notifyRewardAmount(address token, uint amount) external;
