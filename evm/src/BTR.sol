@@ -5,8 +5,8 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@interfaces/IERC7802.sol";
-import "@interfaces/IXERC20.sol";
+import "@interfaces/ercs/IERC7802.sol";
+import "@interfaces/ercs/IXERC20.sol";
 import "@facets/AccessControlFacet.sol";
 
 /**

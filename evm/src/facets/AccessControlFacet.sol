@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {LibDiamond} from "@libraries/LibDiamond.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {IERC173} from "@interfaces/IERC173.sol";
+import {IERC173} from "@interfaces/ercs/IERC173.sol";
 import {AccessControl, PendingAcceptance, ErrorType} from "@/BTRTypes.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {LibAccessControl as AC} from "@libraries/LibAccessControl.sol";

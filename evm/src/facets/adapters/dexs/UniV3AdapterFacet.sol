@@ -8,8 +8,8 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {ALMVault, Range, WithdrawProceeds, ErrorType, DEX} from "@/BTRTypes.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {BTRUtils} from "@libraries/BTRUtils.sol";
-import {IUniV3Pool} from "@interfaces/IUniV3Pool.sol";
-import {IUniV3NFPManager} from "@interfaces/IUniV3NFPManager.sol";
+import {IUniV3Pool} from "@interfaces/dexs/IUniV3Pool.sol";
+import {IUniV3NFPManager} from "@interfaces/dexs/IUniV3NFPManager.sol";
 import {V3AdapterFacet} from "@facets/abstract/V3AdapterFacet.sol";
 import {LibDEXMaths} from "@libraries/LibDEXMaths.sol";
 

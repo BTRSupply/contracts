@@ -7,7 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ALMVault, WithdrawProceeds, Range} from "@/BTRTypes.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {BTRUtils} from "@libraries/BTRUtils.sol";
-import {IVeloV3Pool} from "@interfaces/IVeloV3Pool.sol";
+import {IVeloV3Pool} from "@interfaces/dexs/IVeloV3Pool.sol";
 import {UniV3AdapterFacet} from "@dexs/UniV3AdapterFacet.sol";
 
 /**
@@ -21,8 +21,10 @@ contract VeloV3AdapterFacet is UniV3AdapterFacet {
     using BTRUtils for bytes32;
 
     /**
-     * @inheritdoc UniV3AdapterFacet
-     * @dev Implementation for Velodrome V3
+     * @notice Get the square root price and current tick from a Velodrome V3 pool
+     * @param pool The pool address
+     * @return sqrtPriceX96 The current square root price as a Q64.96
+     * @return tick The current tick
      */
     function _getPoolSqrtPriceAndTick(
         address pool

@@ -2,8 +2,8 @@
 pragma solidity 0.8.28;
 
 import "@layerzerolabs/oft-evm/contracts/OFTAdapter.sol";
-import "@interfaces/IERC7802.sol";
-import "@interfaces/IXERC20.sol";
+import "@interfaces/ercs/IERC7802.sol";
+import "@interfaces/ercs/IXERC20.sol";
 import { BTRErrors as Errors, BTREvents as Events } from "@libraries/BTREvents.sol";
 import "@facets/abstract/PermissionedFacet.sol";
 

@@ -11,7 +11,7 @@ import {BTRUtils} from "@libraries/BTRUtils.sol";
 import {LibMaths as M} from "@libraries/LibMaths.sol";
 import {LibDEXMaths} from "@libraries/LibDEXMaths.sol";
 import {DEXAdapterFacet} from "@facets/abstract/DEXAdapterFacet.sol";
-import {IUniV3Pool} from "@interfaces/IUniV3Pool.sol";
+import {IUniV3Pool} from "@interfaces/dexs/IUniV3Pool.sol";
 
 /**
  * @title DEXAdapterFacet
@@ -90,7 +90,16 @@ abstract contract V3AdapterFacet is DEXAdapterFacet {
     }
 
     /**
-     * @inheritdoc DEXAdapterFacet
+     * @notice Get position details for a given pool, position ID, and tick range
+     * @param pool The pool address
+     * @param positionId The position ID
+     * @param tickLower The lower tick
+     * @param tickUpper The upper tick
+     * @return liquidity The position's liquidity
+     * @return amount0 Amount of token0 in the position
+     * @return amount1 Amount of token1 in the position
+     * @return fees0 Accumulated fees for token0
+     * @return fees1 Accumulated fees for token1
      */
     function _getPositionWithAmounts(
         address pool,
@@ -436,15 +445,10 @@ abstract contract V3AdapterFacet is DEXAdapterFacet {
      * @return arithmeticMeanTick The mean tick over the specified period
      * @return harmonicMeanLiquidity The harmonic mean liquidity over the specified period
      */
-    function consult(
+    function _consult(
         address pool,
         uint32 lookback
-    )
-        public
-        view
-        returns (int24 arithmeticMeanTick, uint128 harmonicMeanLiquidity)
-    {
-        if (lookback == 0) revert Errors.ZeroValue();
+    ) internal view virtual returns (int24 arithmeticMeanTick, uint128 harmonicMeanLiquidity) {
         uint32[] memory secondsAgos = new uint32[](2);
         secondsAgos[0] = lookback;
         secondsAgos[1] = 0;
@@ -454,23 +458,17 @@ abstract contract V3AdapterFacet is DEXAdapterFacet {
             uint160[] memory intervalSecondsX128
         ) = _observe(pool, secondsAgos);
 
+        // Calculate arithmetic mean tick
         int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
-        uint160 secondsPerLiquidityCumulativesDelta = intervalSecondsX128[
-                1
-            ] - intervalSecondsX128[0];
-
-        arithmeticMeanTick = int24(
-            tickCumulativesDelta / int56(uint56(lookback))
-        );
+        arithmeticMeanTick = int24(tickCumulativesDelta / int56(uint56(lookback)));
 
         // Calculate harmonic mean liquidity
-        if (secondsPerLiquidityCumulativesDelta > 0) {
+        uint160 secondsPerLiquidityDelta = intervalSecondsX128[1] - intervalSecondsX128[0];
+        if (secondsPerLiquidityDelta > 0) {
             harmonicMeanLiquidity = uint128(
-                (uint256(lookback) << 128) /
-                    (uint256(secondsPerLiquidityCumulativesDelta) + 1)
+                (uint256(lookback) << 128) / (uint256(secondsPerLiquidityDelta) + 1)
             );
         }
-        return (arithmeticMeanTick, harmonicMeanLiquidity);
     }
 
     /**
@@ -486,12 +484,15 @@ abstract contract V3AdapterFacet is DEXAdapterFacet {
         uint32 lookback,
         uint256 maxDeviation
     ) internal view returns (bool isStale, uint256 deviation) {
+        // Get current price from pool
         (uint160 currentSqrtPriceX96, ) = _getPoolSqrtPriceAndTick(pool);
-        (int24 arithmeticMeanTick, ) = consult(pool, lookback);
-        (isStale, deviation) = currentSqrtPriceX96.getPriceDeviation(
-            arithmeticMeanTick.getSqrtPriceAtTick(),
-            maxDeviation
-        );
+        
+        // Get time-weighted average price
+        (int24 arithmeticMeanTick, ) = _consult(pool, lookback);
+        
+        // Calculate price deviation
+        uint160 twapSqrtPriceX96 = arithmeticMeanTick.getSqrtPriceAtTick();
+        return currentSqrtPriceX96.getPriceDeviation(twapSqrtPriceX96, maxDeviation);
     }
 
     function _checkStalePrice(

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IKodiakV3Pool} from "@interfaces/IKodiakV3Pool.sol";
+import {IKodiakV3Pool} from "@interfaces/dexs/IKodiakV3Pool.sol";
 import {UniV3AdapterFacet} from "@facets/adapters/dexs/UniV3AdapterFacet.sol";
 
 contract KodiakV3AdapterFacet is UniV3AdapterFacet {

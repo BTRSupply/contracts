@@ -7,7 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ALMVault, WithdrawProceeds, Range, ErrorType} from "@/BTRTypes.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {BTRUtils} from "@libraries/BTRUtils.sol";
-import {IAlgebraV4Pool} from "@interfaces/IAlgebraV4Pool.sol";
+import {IAlgebraV4Pool} from "@interfaces/dexs/IAlgebraV4Pool.sol";
 import {V3AdapterFacet} from "@facets/abstract/V3AdapterFacet.sol";
 import {LibDEXMaths} from "@libraries/LibDEXMaths.sol";
 
@@ -18,20 +18,20 @@ contract AlgebraV4AdapterFacet is V3AdapterFacet {
 
     function _getPoolSqrtPriceAndTick(
         address pool
-    ) internal view override returns (uint160 sqrtPriceX96, int24 tick) {
+    ) internal view virtual override returns (uint160 sqrtPriceX96, int24 tick) {
         (sqrtPriceX96, tick, , , , , ) = IAlgebraV4Pool(pool).safelyGetStateOfAMM();
     }
 
     function _observe(
-        address pool,
-        uint32[] memory secondsAgos
+        address /* pool */,
+        uint32[] memory /* secondsAgos */
     )
         internal
-        view
+        pure
         override
         returns (
-            int56[] memory tickCumulatives,
-            uint160[] memory intervalSecondsX128
+            int56[] memory /* tickCumulatives */,
+            uint160[] memory /* intervalSecondsX128 */
         )
     {
         // V4 doesn't have getTimepoints at the pool level
@@ -52,9 +52,14 @@ contract AlgebraV4AdapterFacet is V3AdapterFacet {
             uint128 fees1
         )
     {
-        (liquidity, , , fees0, fees1) = IAlgebraV4Pool(pool).positions(
+        // Handle return types from positions - liquidity is uint256, need to cast to uint128
+        (uint256 liquidity256, , , uint128 f0, uint128 f1) = IAlgebraV4Pool(pool).positions(
             positionId
         );
+        // Safe cast from uint256 to uint128, assumption: liquidity fits in uint128
+        liquidity = uint128(liquidity256);
+        fees0 = f0;
+        fees1 = f1;
     }
 
     function _mintPosition(

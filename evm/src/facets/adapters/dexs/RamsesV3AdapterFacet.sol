@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IRamsesV3Pool} from "@interfaces/IRamsesV3Pool.sol";
+import {IRamsesV3Pool} from "@interfaces/dexs/IRamsesV3Pool.sol";
 import {UniV3AdapterFacet} from "@facets/adapters/dexs/UniV3AdapterFacet.sol";
 
 contract RamsesV3AdapterFacet is UniV3AdapterFacet {
     function _getPoolSqrtPriceAndTick(
         address pool
-    ) internal view override returns (uint160 sqrtPriceX96, int24 tick) {
+    ) internal view virtual override returns (uint160 sqrtPriceX96, int24 tick) {
         (sqrtPriceX96, tick, , , , , ) = IRamsesV3Pool(pool).slot0();
     }
 
@@ -18,6 +18,7 @@ contract RamsesV3AdapterFacet is UniV3AdapterFacet {
         internal
         view
         virtual
+        override
         returns (
             int56[] memory tickCumulatives,
             uint160[] memory intervalSecondsX128

@@ -5,7 +5,7 @@ import {ALMVault, WithdrawProceeds, DEX} from "@/BTRTypes.sol";
 import {BTRUtils} from "@libraries/BTRUtils.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {VeloV3AdapterFacet} from "@dexs/VeloV3AdapterFacet.sol";
-import {IAeroV3Pool} from "@interfaces/IAeroV3Pool.sol";
+import {IAeroV3Pool} from "@interfaces/dexs/IAeroV3Pool.sol";
 
 /**
  * @title AeroV3AdapterFacet

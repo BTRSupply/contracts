@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {ICamelotV3Pool} from "@interfaces/ICamelotV3Pool.sol";
+import {ICamelotV3Pool} from "@interfaces/dexs/ICamelotV3Pool.sol";
 import {AlgebraV3AdapterFacet} from "@facets/adapters/dexs/AlgebraV3AdapterFacet.sol";
 
 contract CamelotV3AdapterFacet is AlgebraV3AdapterFacet {

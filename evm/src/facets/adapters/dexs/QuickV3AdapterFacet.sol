@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IQuickV3Pool} from "@interfaces/IQuickV3Pool.sol";
+import {IQuickV3Pool} from "@interfaces/dexs/IQuickV3Pool.sol";
 import {AlgebraV3AdapterFacet} from "@facets/adapters/dexs/AlgebraV3AdapterFacet.sol";
 
 contract QuickV3AdapterFacet is AlgebraV3AdapterFacet {

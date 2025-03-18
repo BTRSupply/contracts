@@ -74,9 +74,8 @@ library LibALM {
 
     function _getDexAdapter(
         Registry storage registry,
-        bytes32 poolId
+        DEX dex
     ) internal view returns (address) {
-        DEX dex = registry.poolInfo[poolId].dex;
         return registry.dexAdapters[uint8(dex)];
     }
 
@@ -86,7 +85,7 @@ library LibALM {
 
     function _getPoolDexAdapter(Registry storage registry, bytes32 poolId) internal view returns (address) {
         DEX dex = registry.poolInfo[poolId].dex;
-        return registry.dexAdapters[uint8(dex)];
+        return _getDexAdapter(registry, dex);
     }
 
     function getPoolDexAdapter(bytes32 poolId) internal view returns (address) {
@@ -95,8 +94,8 @@ library LibALM {
 
     function _getRangeDexAdapter(Registry storage registry, bytes32 rangeId) internal view returns (address) {
         Range memory range = registry.ranges[rangeId];
-        DEX dex = registry.poolInfo[range.poolId].dex;
-        return _getDexAdapter(registry, dex);
+        PoolInfo memory poolInfo = registry.poolInfo[range.poolId];
+        return _getDexAdapter(registry, poolInfo.dex);
     }
 
     function getRangeDexAdapter(bytes32 rangeId) internal view returns (address) {
@@ -109,7 +108,7 @@ library LibALM {
         Registry storage registry = S.registry();
         if (
             dexIndex > 0 &&
-            registry.dexAdapters[dexIndex - 1] != address(0)
+            registry.dexAdapters[dexIndex - 1] == address(0)
         ) revert Errors.UnexpectedInput();
         registry.dexAdapters[dexIndex] = adapter;
     }
@@ -141,7 +140,7 @@ library LibALM {
             );
 
             // Execute delegatecall to preserve storage context
-            (bool success, bytes memory returnData) = _getDexAdapter(
+            (bool success, bytes memory returnData) = _getPoolDexAdapter(
                 registry,
                 range.poolId
             ).delegatecall(callData);
@@ -231,7 +230,7 @@ library LibALM {
     function _getRatio0(
         ALMVault storage vs,
         Registry storage registry,
-        uint256 index
+        uint256 /* index */
     ) internal returns (uint256 ratio0) {
         (uint256 amount0, uint256 amount1) = _getTotalBalances(vs, registry);
         return amount0.mulDivDown(M.PRECISION_BP_BASIS, amount0 + amount1);
@@ -371,27 +370,16 @@ library LibALM {
     function _burnAllRanges(ALMVault storage vs, Rebalance memory rebalanceData) internal returns (uint256 totalAmount0, uint256 totalAmount1, uint256 totalLpFees0, uint256 totalLpFees1) {
         Registry storage registry = S.registry();
         uint256 burnLength = rebalanceData.ranges.length;
-        uint256 amount0; uint256 amount1; uint256 lpFees0; uint256 lpFees1;
         
         for (uint256 i = 0; i < burnLength; ++i) {
             bytes32 rangeId = rebalanceData.ranges[i].id;
+            
             // Find the index of the range in vs.ranges
-            uint256 index;
-            bool found = false;
+            uint256 index = _findRangeIndex(vs, rangeId);
+            if (index == type(uint256).max) continue; // Skip if range not found
             
-            for (uint256 j = 0; j < vs.ranges.length; ++j) {
-                if (vs.ranges[j] == rangeId) {
-                    index = j;
-                    found = true;
-                    break;
-                }
-            }
-            
-            if (!found) continue; // Skip if range not found
-            
-            (amount0, amount1, lpFees0, lpFees1) = _burnRange(vs, registry, index);
-            
-            // Accumulate amounts and fees
+            // Burn range and accumulate values
+            (uint256 amount0, uint256 amount1, uint256 lpFees0, uint256 lpFees1) = _burnRange(vs, registry, index);
             totalAmount0 += amount0;
             totalAmount1 += amount1;
             totalLpFees0 += lpFees0;
@@ -399,6 +387,16 @@ library LibALM {
         }
 
         return (totalAmount0, totalAmount1, totalLpFees0, totalLpFees1);
+    }
+
+    // Helper function to find range index to reduce stack depth
+    function _findRangeIndex(ALMVault storage vs, bytes32 rangeId) internal view returns (uint256) {
+        for (uint256 j = 0; j < vs.ranges.length; ++j) {
+            if (vs.ranges[j] == rangeId) {
+                return j;
+            }
+        }
+        return type(uint256).max; // Return max value if not found
     }
 
     function _previewDeposit(
@@ -939,8 +937,8 @@ library LibALM {
         Rebalance memory rebalanceData
     ) internal returns (uint256 protocolFees0, uint256 protocolFees1) {
         // Initialize tracking variables
-        (uint256 totalAmount0, uint256 totalAmount1, uint256 totalLpFees0, uint256 totalLpFees1) = _burnAllRanges(vs, rebalanceData);
-        _accrueFees(vs, registry, totalLpFees0, totalLpFees1);
+        (/* uint256 unusedAmount0 */, /* uint256 unusedAmount1 */, uint256 totalLpFees0, uint256 totalLpFees1) = _burnAllRanges(vs, rebalanceData);
+        (protocolFees0, protocolFees1, , ) = _accrueFees(vs, registry, totalLpFees0, totalLpFees1);
         _processSwaps(rebalanceData); // swaps are processed before new ranges are minted
         _mintRanges(vs, rebalanceData);
         return (protocolFees0, protocolFees1);
