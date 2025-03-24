@@ -9,12 +9,17 @@ import {LibALM as ALM} from "@libraries/LibALM.sol";
 import {LibAccessControl} from "@libraries/LibAccessControl.sol";
 import {BTRUtils} from "@libraries/BTRUtils.sol";
 import {DEXAdapterFacet} from "@facets/abstract/V3AdapterFacet.sol";
+import {PermissionedFacet} from "@facets/abstract/PermissionedFacet.sol";
 
-// NB: vault existence is handled in the .getVault() function in all ALM functions
-// noo need for a ifVaultExists modifier
-contract ALMFacet is ERC1155Facet {
+contract ALMFacet is ERC1155Facet, PermissionedFacet {
     using BTRUtils for uint32;
     using BTRUtils for bytes32;
+
+    /// @notice Initialize the facet
+    /// @dev Can only be called once by admin
+    function initializeALM() external onlyAdmin {
+        // No initialization needed for ALMFacet
+    }
 
     function createVault(
         VaultInitParams calldata params

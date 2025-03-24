@@ -119,6 +119,8 @@ library BTREvents {
   event RescueRequested(address indexed receiver, uint64 timestamp, TokenType tokenType, bytes32[] tokens);
   event RescueExecuted(address indexed token, address indexed receiver, uint256 amount, TokenType tokenType);
   event RescueCancelled(address indexed receiver, TokenType tokenType, bytes32[] tokens);
+  event TokenRescued(address indexed token, uint256 indexed tokenId, address indexed receiver);
+  event RescueFailed(address indexed token, uint256 indexed tokenId, string reason);
 
   // Swapper events
   event Swapped(address indexed user, address indexed assetIn, address indexed assetOut, uint256 amountIn, uint256 amountOut);

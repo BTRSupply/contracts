@@ -21,9 +21,23 @@ contract SwapperFacet is PermissionedFacet {
     using LibAccessControl for bytes32;
     using LibRescue for address;
 
+    /// @notice Initialize the facet
+    /// @dev Can only be called once by admin
+    function initializeSwapper() external onlyAdmin {
+        // No initialization needed for SwapperFacet
+    }
+
     /*═══════════════════════════════════════════════════════════════╗
     ║                          SWAP FUNCTIONS                        ║
     ╚═══════════════════════════════════════════════════════════════*/
+
+    /// @notice Executes a swap with minimal restrictions - silent, less safe, use with caution
+    /// @param _input Input token address
+    /// @param _router Router address to execute the swap
+    /// @param _callData Encoded swap calldata for the router
+    function swap(address _input, address _router, bytes calldata _callData) external {
+        SW.swap(_input, _router, _callData);
+    }
 
     /// @notice Executes a single swap
     /// @param _input Address of the input token

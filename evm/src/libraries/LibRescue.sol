@@ -10,6 +10,8 @@ import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
+/// @title LibRescue
+/// @notice Library for rescuing tokens accidentally sent to the contract
 library LibRescue {
 
     using SafeERC20 for IERC20;
@@ -24,7 +26,6 @@ library LibRescue {
     uint64 public constant MAX_RESCUE_TIMELOCK = 7 days;
     uint64 public constant MIN_RESCUE_VALIDITY = 1 days;
     uint64 public constant MAX_RESCUE_VALIDITY = 30 days;
-
     // Special token address for native ETH
     address internal constant ETH_ADDRESS = address(1);
 
@@ -32,60 +33,79 @@ library LibRescue {
     ║                             VIEWS                              ║
     ╚═══════════════════════════════════════════════════════════════*/
 
-    function getRescueRequest(
-        address receiver,
-        TokenType tokenType
-    ) internal view returns (RescueRequest storage) {
-        return S.rescue().rescueRequests[receiver][tokenType];
+    /// @notice Get rescue storage pointer 
+    function rs() internal pure returns (Rescue storage) {
+        return S.rescue();
     }
 
+    /// @notice Get a rescue request for a given receiver and token type
+    /// @param receiver The address of the receiver
+    /// @param tokenType The type of token being rescued
+    /// @return The rescue request struct
+    function getRescueRequest(address receiver, TokenType tokenType) internal view returns (
+        RescueRequest storage
+    ) {
+        return rs().rescueRequests[receiver][tokenType];
+    }
+
+    /// @notice Check if a rescue request is valid
+    /// @param receiver The address that requested the rescue
+    /// @param tokenType The type of token being rescued
+    /// @return Status code: 0=none, 1=locked, 2=unlocked, 3=expired
     function getRescueStatus(address receiver, TokenType tokenType) internal view returns (uint8) {
         RescueRequest storage request = getRescueRequest(receiver, tokenType);
-        uint64 timestamp = request.timestamp;
         
-        if (timestamp == 0) {
-            return 0; // No rescue request
-        } else if (block.timestamp < (timestamp + S.rescue().rescueTimelock)) {
-            return 1; // Locked
-        } else if (block.timestamp <= (timestamp + S.rescue().rescueTimelock + S.rescue().rescueValidity)) {
-            return 2; // Unlocked and valid
-        } else {
-            return 3; // Expired
-        }
+        // Check if request exists
+        if (request.timestamp == 0) return 0; // No request
+
+        // Cache timelock and validity values to avoid multiple SLOAD operations
+        uint64 timelock = rs().rescueTimelock;
+        uint64 validity = rs().rescueValidity;
+        
+        uint64 unlockTime = request.timestamp + timelock;
+        uint64 expiryTime = unlockTime + validity;
+        
+        uint64 currentTime = uint64(block.timestamp);
+        if (currentTime < unlockTime) return 1; // Locked
+        if (currentTime >= expiryTime) return 3; // Expired
+        return 2; // Unlocked and valid
     }
 
+    /// @notice Check if a rescue is locked, expired, or unlocked
     function isRescueLocked(address receiver, TokenType tokenType) internal view returns (bool) {
-        return getRescueStatus(receiver, tokenType) == 1; // 1 = locked
+        return getRescueStatus(receiver, tokenType) == 1;
     }
-
+    
     function isRescueExpired(address receiver, TokenType tokenType) internal view returns (bool) {
-        return getRescueStatus(receiver, tokenType) == 3; // 3 = expired
+        return getRescueStatus(receiver, tokenType) == 3;
     }
-
+    
     function isRescueUnlocked(address receiver, TokenType tokenType) internal view returns (bool) {
-        return getRescueStatus(receiver, tokenType) == 2; // 2 = unlocked and valid
+        return getRescueStatus(receiver, tokenType) == 2;
     }
 
     /*═══════════════════════════════════════════════════════════════╗
     ║                          CONFIGURATION                         ║
     ╚═══════════════════════════════════════════════════════════════*/
 
+    /// @notice Initialize rescue functionality with default settings
     function initialize() internal {
-        Rescue storage rs = S.rescue();
-        rs.rescueTimelock = DEFAULT_RESCUE_TIMELOCK;
-        rs.rescueValidity = DEFAULT_RESCUE_VALIDITY;
+        Rescue storage _rescue = rs();
+        _rescue.rescueTimelock = DEFAULT_RESCUE_TIMELOCK;
+        _rescue.rescueValidity = DEFAULT_RESCUE_VALIDITY;
     }
 
+    /// @notice Set the timelock and validity periods for rescue requests
     function setRescueConfig(uint64 timelock, uint64 validity) internal {
         if (timelock < MIN_RESCUE_TIMELOCK || timelock > MAX_RESCUE_TIMELOCK ||
             validity < MIN_RESCUE_VALIDITY || validity > MAX_RESCUE_VALIDITY) {
             revert Errors.OutOfRange(timelock, MIN_RESCUE_TIMELOCK, MAX_RESCUE_TIMELOCK);
         }
 
-        Rescue storage rs = S.rescue();
-        rs.rescueTimelock = timelock;
-        rs.rescueValidity = validity;
-
+        Rescue storage _rescue = rs();
+        _rescue.rescueTimelock = timelock;
+        _rescue.rescueValidity = validity;
+        
         emit Events.RescueConfigUpdated(timelock, validity);
     }
 
@@ -93,137 +113,101 @@ library LibRescue {
     ║                       RESCUE REQUESTS                          ║
     ╚═══════════════════════════════════════════════════════════════*/
 
-    function requestRescueNative() internal {
-        // For native ETH, we don't need specific values
-        bytes32[] memory values = new bytes32[](0);
-        requestRescue(TokenType.NATIVE, values);
-    }
-
-    function requestRescueERC20(address[] memory tokens) internal {
-        if (tokens.length == 0) revert Errors.InvalidParameter();
+    /// @notice Create a rescue request with necessary data
+    function _createRescueRequest(
+        address receiver,
+        TokenType tokenType,
+        address tokenAddress,
+        bytes32[] memory tokenIds
+    ) private {
+        RescueRequest storage request = getRescueRequest(receiver, tokenType);
         
-        bytes32[] memory values = new bytes32[](tokens.length);
-        for (uint256 i = 0; i < tokens.length;) {
-            values[i] = bytes32(uint256(uint160(tokens[i])));
-            unchecked { ++i; }
-        }
-        
-        requestRescue(TokenType.ERC20, values);
-    }
-
-    function requestRescueERC721(uint256 id) internal {
-        bytes32[] memory ids = new bytes32[](1);
-        ids[0] = bytes32(id);
-        requestRescue(TokenType.ERC721, ids);
-    }
-
-    function requestRescueERC721(bytes32[] memory ids) internal {
-        requestRescue(TokenType.ERC721, ids);
-    }
-
-    function requestRescueERC1155(uint256 id) internal {
-        bytes32[] memory ids = new bytes32[](1);
-        ids[0] = bytes32(id);
-        requestRescue(TokenType.ERC1155, ids);
-    }
-
-    function requestRescueERC1155(bytes32[] memory ids) internal {
-        requestRescue(TokenType.ERC1155, ids);
-    }
-
-    function requestRescue(TokenType tokenType, bytes32[] memory tokens) internal {
-        // Create rescue request
-        Rescue storage rs = S.rescue();
-        RescueRequest storage request = rs.rescueRequests[msg.sender][tokenType];
+        // Create the rescue request
         request.timestamp = uint64(block.timestamp);
-        request.receiver = msg.sender;
+        request.receiver = receiver;
         request.tokenType = tokenType;
-        request.tokens = tokens;
-        emit Events.RescueRequested(msg.sender, request.timestamp, tokenType, tokens);
+        request.tokenAddress = tokenAddress;
+        
+        // Store the token IDs
+        delete request.tokenIds;
+        
+        // Copy tokenIds to storage - use unchecked to save gas on loop counters
+        uint256 length = tokenIds.length;
+        if (length > 0) {
+            // Pre-allocate the array size to save gas
+            request.tokenIds = new bytes32[](length);
+            
+            unchecked {
+                for (uint256 i = 0; i < length; ++i) {
+                    request.tokenIds[i] = tokenIds[i];
+                }
+            }
+        }
+        
+        emit Events.RescueRequested(receiver, uint64(block.timestamp), tokenType, request.tokenIds);
     }
 
-    function requestRescueAll() internal {
-        requestRescue(TokenType.NATIVE, new bytes32[](0));
-        requestRescue(TokenType.ERC20, new bytes32[](0));
-        requestRescue(TokenType.ERC721, new bytes32[](0));
-        requestRescue(TokenType.ERC1155, new bytes32[](0));
+    /// @notice Request rescue for different token types
+    function requestRescueNative() internal {
+        _createRescueRequest(msg.sender, TokenType.NATIVE, ETH_ADDRESS, new bytes32[](0));
     }
 
-    /*═══════════════════════════════════════════════════════════════╗
-    ║                     EXECUTE/CANCEL RESCUES                     ║
-    ╚═══════════════════════════════════════════════════════════════*/
-
-    function rescue(
-        address receiver,
-        TokenType tokenType
-    ) internal {
-        Rescue storage rs = S.rescue();
-        RescueRequest storage request = rs.rescueRequests[receiver][tokenType];
-
-        // Check if rescue request exists
-        if (request.timestamp == 0) {
-            revert Errors.NotFound(ErrorType.RESCUE);
+    /// @notice Request rescue for ERC20 tokens (storing all tokens in tokenIds)
+    /// @param tokenAddresses Array of ERC20 token addresses to rescue
+    function requestRescueERC20(address[] memory tokenAddresses) internal {
+        // Store all token addresses as bytes32 in tokenIds
+        uint256 length = tokenAddresses.length;
+        bytes32[] memory encodedAddresses = new bytes32[](length);
+        
+        unchecked {
+            for (uint256 i = 0; i < length; ++i) {
+                encodedAddresses[i] = bytes32(uint256(uint160(tokenAddresses[i])));
+            }
         }
-
-        // Check if rescue is still locked
-        if (block.timestamp < request.timestamp + rs.rescueTimelock) {
-            revert Errors.Locked();
-        }
-
-        // Check if rescue has expired
-        if (block.timestamp > request.timestamp + rs.rescueTimelock + rs.rescueValidity) {
-            revert Errors.Expired(ErrorType.RESCUE);
-        }
-
-        // Execute the appropriate rescue based on token type
-        if (tokenType == TokenType.NATIVE) {
-            rescueNative(receiver);
-        } else if (tokenType == TokenType.ERC20) {
-            rescueERC20(request.tokens, receiver);
-        } else if (tokenType == TokenType.ERC721 || tokenType == TokenType.ERC1155) {
-            rescueNFTs(address(uint160(uint256(request.tokens[0]))), tokenType, receiver, request.tokens);
-        } else {
-            revert Errors.InvalidParameter();
-        }
-
-        // Clear rescue request
-        delete rs.rescueRequests[msg.sender][tokenType];
+        
+        // Create a single request with multiple tokens
+        _createRescueRequest(msg.sender, TokenType.ERC20, address(0), encodedAddresses);
     }
 
-    function rescueAll(address receiver) internal {
-        rescue(receiver, TokenType.NATIVE);
-        rescue(receiver, TokenType.ERC20);
-        rescue(receiver, TokenType.ERC721);
-        rescue(receiver, TokenType.ERC1155);
+    function requestRescueERC721(address tokenAddress, uint256 tokenId) internal {
+        bytes32[] memory tokenIds = new bytes32[](1);
+        tokenIds[0] = bytes32(tokenId);
+        _createRescueRequest(msg.sender, TokenType.ERC721, tokenAddress, tokenIds);
+    }
+    
+    function requestRescueERC721(address tokenAddress, bytes32[] memory tokenIds) internal {
+        _createRescueRequest(msg.sender, TokenType.ERC721, tokenAddress, tokenIds);
     }
 
-    function cancelRescue(
-        address receiver,
-        TokenType tokenType
-    ) internal {
-        // Check if token is valid
-        if (receiver == address(0)) {
-            revert Errors.ZeroAddress();
+    function requestRescueERC1155(address tokenAddress, uint256 tokenId) internal {
+        bytes32[] memory tokenIds = new bytes32[](1);
+        tokenIds[0] = bytes32(tokenId);
+        _createRescueRequest(msg.sender, TokenType.ERC1155, tokenAddress, tokenIds);
+    }
+    
+    function requestRescueERC1155(address tokenAddress, bytes32[] memory tokenIds) internal {
+        _createRescueRequest(msg.sender, TokenType.ERC1155, tokenAddress, tokenIds);
+    }
+
+    /// @notice Cancel rescue requests
+    function cancelRescue(address receiver, TokenType tokenType) internal {
+        RescueRequest storage request = getRescueRequest(receiver, tokenType);
+        
+        // Create copies for the event
+        address tokenAddress = request.tokenAddress;
+        uint256 length = request.tokenIds.length;
+        bytes32[] memory tokenIdsCopy = new bytes32[](length);
+        
+        unchecked {
+            for (uint256 i = 0; i < length; ++i) {
+                tokenIdsCopy[i] = request.tokenIds[i];
+            }
         }
-
-        // Get rescue request
-        Rescue storage rs = S.rescue();
-        RescueRequest storage request = rs.rescueRequests[receiver][tokenType];
-
-        // Check if rescue request exists
-        if (request.timestamp == 0) {
-            revert Errors.NotFound(ErrorType.RESCUE);
-        }
-
-        // Check if caller is the requester or has admin role
-        if (msg.sender != request.receiver && !AC.hasRole(AC.ADMIN_ROLE, msg.sender)) {
-            revert Errors.Unauthorized(ErrorType.RESCUE);
-        }
-
-        // Clear rescue request
-        delete rs.rescueRequests[receiver][tokenType];
-
-        emit Events.RescueCancelled(receiver, tokenType, new bytes32[](0));
+        
+        // Clear the rescue request
+        delete rs().rescueRequests[receiver][tokenType];
+        
+        emit Events.RescueCancelled(receiver, tokenType, tokenIdsCopy);
     }
 
     function cancelRescueAll(address receiver) internal {
@@ -234,68 +218,139 @@ library LibRescue {
     }
 
     /*═══════════════════════════════════════════════════════════════╗
-    ║                      INTERNAL FUNCTIONS                        ║
+    ║                         EXECUTE RESCUE                         ║
     ╚═══════════════════════════════════════════════════════════════*/
 
-    function rescueNative(address receiver) private {
-        uint256 balance = address(this).balance;
-        if (balance == 0) revert Errors.ZeroValue();
+    /// @notice Validate that a rescue can be executed
+    function validateRescue(address receiver, TokenType tokenType) internal view {
+        uint8 status = getRescueStatus(receiver, tokenType);
         
-        (bool success, ) = receiver.call{value: balance}("");
-        if (!success) revert Errors.Failed(ErrorType.TRANSFER);
-        
-        emit Events.RescueExecuted(ETH_ADDRESS, receiver, balance, TokenType.NATIVE);
+        if (status == 0) {
+            revert Errors.NotFound(ErrorType.RESCUE);
+        } else if (status == 1) {
+            revert Errors.Locked();
+        } else if (status == 3) {
+            revert Errors.Expired(ErrorType.RESCUE);
+        }
+        // Status must be 2 (unlocked) to proceed
     }
 
-    function rescueERC20(bytes32[] storage tokens, address receiver) private {
-        uint256 totalValue = 0;
-        
-        for (uint256 i = 0; i < tokens.length;) {
-            address token = address(uint160(uint256(tokens[i])));
-            if (token == address(0)) continue;
-            
-            IERC20 erc20 = IERC20(token);
-            uint256 balance = erc20.balanceOf(address(this));
-            
-            if (balance > 0) {
-                erc20.safeTransfer(receiver, balance);
-                totalValue += balance;
-                
-                emit Events.RescueExecuted(token, receiver, balance, TokenType.ERC20);
-            }
-            unchecked { ++i; }
+    /// @notice Internal function to rescue a specific token type
+    /// @dev Returns true if the rescue was successful
+    function _rescueTokenType(address receiver, TokenType tokenType, bool validate) private returns (bool) {
+        // Check status only if requested (optimized path for rescueAll)
+        if (validate) {
+            uint8 status = getRescueStatus(receiver, tokenType);
+            if (status != 2) return false; // Only proceed if unlocked
         }
         
-        if (totalValue == 0) revert Errors.ZeroValue();
-    }
-
-    function rescueNFTs(address token, TokenType tokenType, address receiver, bytes32[] storage ids) private {
-        uint256 count = 0;
+        // Get request data (once) and cache in memory
+        RescueRequest storage request = getRescueRequest(receiver, tokenType);
+        address tokenAddress = request.tokenAddress;
+        uint256 tokenIdsLength = request.tokenIds.length;
+        bool success = false;
         
-        for (uint256 i = 0; i < ids.length;) {
-            uint256 tokenId = uint256(ids[i]);
-            
-            if (tokenType == TokenType.ERC721) {
-                IERC721 erc721 = IERC721(token);
-                try erc721.ownerOf(tokenId) returns (address owner) {
-                    if (owner == address(this)) {
-                        erc721.safeTransferFrom(address(this), receiver, tokenId);
-                        count++;
-                    }
-                } catch {}
-            } else if (tokenType == TokenType.ERC1155) {
-                IERC1155 erc1155 = IERC1155(token);
-                uint256 balance = erc1155.balanceOf(address(this), tokenId);
-                
-                if (balance > 0) {
-                    try erc1155.safeTransferFrom(address(this), receiver, tokenId, balance, "") {
-                        count++;
-                    } catch {}
+        if (tokenType == TokenType.NATIVE) {
+            // Rescue ETH
+            uint256 balance = address(this).balance;
+            if (balance > 0) {
+                (bool sent,) = receiver.call{value: balance}("");
+                if (sent) {
+                    emit Events.RescueExecuted(ETH_ADDRESS, receiver, balance, TokenType.NATIVE);
+                    success = true;
                 }
             }
-            unchecked { ++i; }
+        } else if (tokenType == TokenType.ERC20) {
+            // Rescue ERC20 tokens
+            if (tokenIdsLength > 0) {
+                // Multiple ERC20 tokens stored in tokenIds
+                unchecked {
+                    for (uint256 i = 0; i < tokenIdsLength; ++i) {
+                        bytes32 tokenIdData = request.tokenIds[i];
+                        address erc20Address = address(uint160(uint256(tokenIdData)));
+                        if (erc20Address != address(0)) {
+                            IERC20 token = IERC20(erc20Address);
+                            uint256 balance = token.balanceOf(address(this));
+                            if (balance > 0) {
+                                IERC20(erc20Address).safeTransfer(receiver, balance);
+                                emit Events.RescueExecuted(erc20Address, receiver, balance, TokenType.ERC20);
+                                success = true;
+                            }
+                        }
+                    }
+                }
+            } else if (tokenAddress != address(0)) {
+                // Single ERC20 token in tokenAddress
+                IERC20 token = IERC20(tokenAddress);
+                uint256 balance = token.balanceOf(address(this));
+                if (balance > 0) {
+                    token.safeTransfer(receiver, balance);
+                    emit Events.RescueExecuted(tokenAddress, receiver, balance, TokenType.ERC20);
+                    success = true;
+                }
+            }
+        } else if (tokenType == TokenType.ERC721) {
+            // Rescue ERC721 tokens
+            if (tokenAddress != address(0) && tokenIdsLength > 0) {
+                IERC721 nft = IERC721(tokenAddress);
+                unchecked {
+                    for (uint256 i = 0; i < tokenIdsLength; ++i) {
+                        uint256 tokenId = uint256(request.tokenIds[i]);
+                        nft.safeTransferFrom(address(this), receiver, tokenId);
+                        emit Events.RescueExecuted(tokenAddress, receiver, tokenId, TokenType.ERC721);
+                        success = true;
+                    }
+                }
+            }
+        } else if (tokenType == TokenType.ERC1155) {
+            // Rescue ERC1155 tokens
+            if (tokenAddress != address(0) && tokenIdsLength > 0) {
+                IERC1155 token = IERC1155(tokenAddress);
+                unchecked {
+                    for (uint256 i = 0; i < tokenIdsLength; ++i) {
+                        uint256 tokenId = uint256(request.tokenIds[i]);
+                        uint256 balance = token.balanceOf(address(this), tokenId);
+                        if (balance > 0) {
+                            token.safeTransferFrom(address(this), receiver, tokenId, balance, "");
+                            emit Events.RescueExecuted(tokenAddress, receiver, tokenId, TokenType.ERC1155);
+                            success = true;
+                        }
+                    }
+                }
+            }
         }
-        if (count == 0) revert Errors.Failed(ErrorType.RESCUE);
-        emit Events.RescueExecuted(token, receiver, count, tokenType);
+        
+        // Clear the rescue request if any rescue was successful or we're validating
+        if (success || validate) {
+            delete rs().rescueRequests[receiver][tokenType];
+        }
+        
+        return success;
+    }
+
+    /// @notice Execute rescue for all token types
+    function rescueAll(address receiver) internal {
+        // Only attempt rescues for requests that exist and are unlocked
+        // This avoids unnecessary gas consumption
+        uint8 nativeStatus = getRescueStatus(receiver, TokenType.NATIVE);
+        uint8 erc20Status = getRescueStatus(receiver, TokenType.ERC20);
+        uint8 erc721Status = getRescueStatus(receiver, TokenType.ERC721);
+        uint8 erc1155Status = getRescueStatus(receiver, TokenType.ERC1155);
+        
+        if (nativeStatus == 2) _rescueTokenType(receiver, TokenType.NATIVE, false);
+        if (erc20Status == 2) _rescueTokenType(receiver, TokenType.ERC20, false);
+        if (erc721Status == 2) _rescueTokenType(receiver, TokenType.ERC721, false);
+        if (erc1155Status == 2) _rescueTokenType(receiver, TokenType.ERC1155, false);
+    }
+
+    /// @notice Execute a rescue operation for a specific token type
+    function rescue(address receiver, TokenType tokenType) internal {
+        validateRescue(receiver, tokenType);
+        bool success = _rescueTokenType(receiver, tokenType, false);
+        
+        if (!success) {
+            // Clear the request even if rescue failed - it was validated
+            delete rs().rescueRequests[receiver][tokenType];
+        }
     }
 }

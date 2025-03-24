@@ -1,9 +1,10 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.28;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
-import {DiamondDeployer} from "@utils/DiamondDeployer.sol";
+import {ICreateX} from "@interfaces/ICreateX.sol";
+import {DiamondDeployer} from "@utils/generated/DiamondDeployer.gen.sol";
 
 /**
  * @title DeployDiamond
@@ -29,9 +30,13 @@ contract DeployDiamond is Script {
         // Print deployment summary
         console2.log("=========== Deployment Summary ===========");
         console2.log("Diamond address:          ", address(deployment.diamond));
-        console2.log("DiamondCutFacet address:  ", address(deployment.diamondCutFacet));
-        console2.log("DiamondLoupeFacet address:", address(deployment.diamondLoupeFacet));
-        console2.log("AccessControlFacet address:", address(deployment.accessControlFacet));
+        
+        // Access facets by index, using the expected order from the deployment script
+        // The facet types are described in the facetNames array
+        for (uint i = 0; i < deployment.facets.length && i < deployment.facetNames.length; i++) {
+            console2.log(string(abi.encodePacked(deployment.facetNames[i], " address:")), deployment.facets[i]);
+        }
+
         console2.log("Admin address:            ", admin);
         console2.log("=========================================");
     }

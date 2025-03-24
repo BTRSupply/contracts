@@ -22,6 +22,10 @@ target/
 # Node.js
 node_modules/
 
+# Python and temporary files
+**/__pycache__/
+**/*.wip
+
 # Environment files
 .env
 .env.*

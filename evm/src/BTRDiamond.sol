@@ -20,7 +20,7 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
 import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
-import {LibAccessControl} from "@libraries/LibAccessControl.sol";
+import {LibAccessControl as AC} from "@libraries/LibAccessControl.sol";
 import {LibDiamond as D} from "@libraries/LibDiamond.sol";
 import {AccessControl, Diamond, ErrorType} from "@/BTRTypes.sol";
 import {BTRErrors as Errors} from "@libraries/BTREvents.sol";
@@ -35,9 +35,19 @@ contract BTRDiamond {
             revert Errors.NotFound(ErrorType.FACET);
         D.enforceHasContractCode(_diamondCutFacet);
         AccessControl storage acs = S.accessControl();
-        acs.roles[LibAccessControl.ADMIN_ROLE].members.add(_owner);
-        acs.roles[LibAccessControl.ADMIN_ROLE].adminRole = LibAccessControl
-            .ADMIN_ROLE;
+        acs.grantDelay = AC.DEFAULT_GRANT_DELAY;
+        acs.acceptWindow = AC.DEFAULT_ACCEPT_WINDOW;
+        
+        // Initialize admin role
+        acs.roles[AC.ADMIN_ROLE].members.add(_owner);
+        acs.roles[AC.ADMIN_ROLE].adminRole = AC.ADMIN_ROLE;
+        
+        // Initialize other roles with admin as their admin role
+        acs.roles[AC.MANAGER_ROLE].members.add(_owner);
+        acs.roles[AC.MANAGER_ROLE].adminRole = AC.ADMIN_ROLE;
+        acs.roles[AC.KEEPER_ROLE].adminRole = AC.ADMIN_ROLE;
+        acs.roles[AC.TREASURY_ROLE].adminRole = AC.ADMIN_ROLE;
+        
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         bytes4[] memory functionSelectors = new bytes4[](1);
         functionSelectors[0] = IDiamondCut.diamondCut.selector;

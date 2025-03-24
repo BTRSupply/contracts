@@ -9,9 +9,12 @@ import {BTRUtils} from "@libraries/BTRUtils.sol";
 import {ErrorType, CoreStorage, ALMVault} from "@/BTRTypes.sol";
 import {LibERC1155} from "@libraries/LibERC1155.sol";
 import {RestrictedFacet} from "@facets/abstract/RestrictedFacet.sol";
-import {ManagementFacet} from "@facets/ManagementFacet.sol";
+import {PausableFacet} from "@facets/abstract/PausableFacet.sol";
+import {NonReentrantFacet} from "@facets/abstract/NonReentrantFacet.sol";
 
-abstract contract ERC1155Facet is ManagementFacet, RestrictedFacet {
+// NB: vault existence is handled in the .getVault() function
+// no need for a ifVaultExists modifier
+abstract contract ERC1155Facet is RestrictedFacet, PausableFacet, NonReentrantFacet {
     using SafeERC20 for IERC20;
     using BTRUtils for uint32;
     using LibERC1155 for uint32;
@@ -39,25 +42,14 @@ abstract contract ERC1155Facet is ManagementFacet, RestrictedFacet {
         id.approve(msg.sender, spender, amount);
     }
 
-    function _transfer(
-        uint32 id,
-        address sender,
-        address recipient,
-        uint256 amount
-    )
-        internal
-        whenVaultNotPaused(id)
-        onlyNotBlacklisted(id, sender)
-        onlyUnrestrictedMinter(id, recipient)
-    {
-        id.transfer(sender, recipient, amount);
-    }
-
     function _mint(
         uint32 id,
         address account,
         uint256 amount
-    ) internal whenVaultNotPaused(id) onlyUnrestrictedMinter(id, account) {
+    ) internal
+        whenVaultNotPaused(id)
+        onlyUnrestrictedMinter(id, account)
+    {
         id.mint(account, amount);
     }
 
@@ -65,7 +57,10 @@ abstract contract ERC1155Facet is ManagementFacet, RestrictedFacet {
         uint32 id,
         address account,
         uint256 amount
-    ) internal whenVaultNotPaused(id) onlyUnrestrictedMinter(id, account) {
+    ) internal
+        whenVaultNotPaused(id)
+        onlyUnrestrictedMinter(id, account)
+    {
         id.burn(account, amount);
     }
 
@@ -73,8 +68,14 @@ abstract contract ERC1155Facet is ManagementFacet, RestrictedFacet {
         uint32 id,
         address recipient,
         uint256 amount
-    ) external returns (bool) {
-        _transfer(id, msg.sender, recipient, amount);
+    )
+        external
+        whenVaultNotPaused(id)
+        onlyNotBlacklisted(id, msg.sender)
+        onlyUnrestrictedMinter(id, recipient)
+        returns (bool)
+    {
+        id.transfer(msg.sender, recipient, amount);
         return true;
     }
 
@@ -83,7 +84,12 @@ abstract contract ERC1155Facet is ManagementFacet, RestrictedFacet {
         address sender,
         address recipient,
         uint256 amount
-    ) external whenVaultNotPaused(id) onlyUnrestrictedMinter(id, recipient) returns (bool) {
+    )
+        external
+        whenVaultNotPaused(id)
+        onlyUnrestrictedMinter(id, recipient)
+        returns (bool)
+    {
         id.transferFrom(msg.sender, sender, recipient, amount);
         return true;
     }

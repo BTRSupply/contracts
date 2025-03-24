@@ -1,187 +1,229 @@
 #!/usr/bin/env python3
+import json
 import os
 import sys
 import glob
-from extract_selectors import extract_selectors, generate_selector_function
-
-def generate_facet_imports(facets):
-    """Generate import statements for facets"""
-    imports = []
-    for facet in facets:
-        imports.append(f'import {{{facet}}} from "@facets/{facet}.sol";')
-    return '\n'.join(imports)
-
-def find_artifacts_dir(base_dir):
-    """Find the artifacts directory containing compiled contracts"""
-    potential_paths = [
-        os.path.join(base_dir, "out"),
-        os.path.join(base_dir, "artifacts")
-    ]
-    
-    for path in potential_paths:
-        if os.path.exists(path):
-            return path
-    
-    return None
 
 def find_artifact_file(facet_name, artifacts_dir):
     """Find the artifact file for a facet"""
-    potential_paths = [
+    # Check direct paths first (faster)
+    for path in [
         os.path.join(artifacts_dir, f"{facet_name}.sol", f"{facet_name}.json"),
         os.path.join(artifacts_dir, "src", "facets", f"{facet_name}.sol", f"{facet_name}.json"),
         os.path.join(artifacts_dir, "temp_src", "facets", f"{facet_name}.sol", f"{facet_name}.json")
-    ]
-    
-    # Also try to find it with a glob pattern
-    glob_patterns = [
-        os.path.join(artifacts_dir, "**", f"{facet_name}.json"),
-        os.path.join(artifacts_dir, "**", f"{facet_name}.sol", f"{facet_name}.json")
-    ]
-    
-    for path in potential_paths:
+    ]:
         if os.path.exists(path):
             return path
     
     # Try glob patterns if direct paths don't work
-    for pattern in glob_patterns:
+    for pattern in [
+        os.path.join(artifacts_dir, "**", f"{facet_name}.json"),
+        os.path.join(artifacts_dir, "**", f"{facet_name}.sol", f"{facet_name}.json")
+    ]:
         matches = glob.glob(pattern, recursive=True)
         if matches:
             return matches[0]
     
     return None
 
-def generate_all_selector_functions(facets, evm_dir):
-    """Generate all selector functions for the given facets"""
-    all_functions = []
-    artifacts_dir = find_artifacts_dir(evm_dir)
+def get_excluded_selectors():
+    """Get selectors that should be excluded from certain facets"""
+    # Access control related selectors (should only be in AccessControlFacet)
+    access_control_selectors = [
+        "isAdmin()",
+        "isKeeper()",
+        "isManager()",
+        "checkRole(bytes32)",
+        "checkRole(bytes32,address)",
+        "hasRole(bytes32,address)",
+        "grantRole(bytes32,address)",
+        "revokeRole(bytes32,address)",
+        "renounceRole(bytes32,address)"
+    ]
+    
+    # Pause related selectors (should only be in ManagementFacet)
+    pause_selectors = [
+        "pause()",
+        "unpause()",
+        "paused()"
+    ]
+    
+    return {
+        "AccessControlFacet": [],
+        "ManagementFacet": [],
+        "ALL_OTHERS": access_control_selectors + pause_selectors
+    }
+
+def get_permissioned_facet_selectors():
+    """Get selectors that should only be included in specific facets"""
+    return {
+        "AccessControlFacet": [
+            "hasRole(bytes32,address)",
+            "grantRole(bytes32,address)",
+            "revokeRole(bytes32,address)",
+            "renounceRole(bytes32,address)",
+            "checkRole(bytes32,address)",
+            "checkRole(bytes32)",
+            "isAdmin(address)",
+            "isKeeper(address)",
+            "isManager(address)",
+            "isTreasury(address)"
+        ],
+        "ManagementFacet": [
+            "isPaused()",
+            "isPaused(uint32)",
+            "pause()",
+            "pause(uint32)",
+            "unpause()",
+            "unpause(uint32)",
+            "paused()"
+        ],
+        "DiamondLoupeFacet": [
+            "supportsInterface(bytes4)"
+        ]
+    }
+
+def should_include_selector(facet_name, selector_name):
+    """Determine if a selector should be included in a facet"""
+    excluded_selectors = get_excluded_selectors()
+    permissioned_selectors = get_permissioned_facet_selectors()
+    
+    # Check if this is a permissioned selector that should only be in specific facets
+    for facet, selectors in permissioned_selectors.items():
+        if selector_name in selectors and facet_name != facet:
+            return False
+    
+    # Check if this selector is excluded for this facet
+    if facet_name in excluded_selectors and selector_name in excluded_selectors[facet_name]:
+        return False
+    
+    # Check if this selector is excluded for all other facets except specific ones
+    if facet_name not in ["AccessControlFacet", "ManagementFacet"] and selector_name in excluded_selectors["ALL_OTHERS"]:
+        return False
+    
+    return True
+
+def extract_selectors(facet_name, artifacts_dir):
+    """Extract function selectors from a compiled facet artifact"""
+    artifact_path = find_artifact_file(facet_name, artifacts_dir)
+    
+    if not artifact_path:
+        print(f"Warning: Artifact not found for {facet_name} in {artifacts_dir}", file=sys.stderr)
+        return None
+    
+    try:
+        with open(artifact_path, 'r') as f:
+            artifact = json.load(f)
+        
+        if "methodIdentifiers" not in artifact:
+            print(f"Warning: No method identifiers found in {facet_name} artifact", file=sys.stderr)
+            return None
+        
+        # Filter out constructors and include only appropriate selectors
+        selectors = [(f"0x{selector}", method) for method, selector in artifact["methodIdentifiers"].items() 
+                if not method.startswith("constructor") and should_include_selector(facet_name, method)]
+        
+        # Sort by method name
+        selectors.sort(key=lambda x: x[1])
+        
+        return selectors
+    except Exception as e:
+        print(f"Error processing {facet_name} artifact: {e}", file=sys.stderr)
+        return None
+
+def get_initialize_method(facet_name):
+    """Get the initialize method for a facet"""
+    base_name = facet_name.replace("Facet", "")
+    return f"initialize{base_name}"
+
+def get_facet_selectors(facet_name, artifacts_dir):
+    """Get selectors for a facet"""
+    selectors = extract_selectors(facet_name, artifacts_dir)
+    if selectors is None:
+        print(f"No selectors found for {facet_name}", file=sys.stderr)
+        return None
+    
+    # Sort selectors by name for consistency
+    selectors.sort(key=lambda x: x[1])
+    
+    return selectors
+
+def generate_selector_function(facet_name, selectors):
+    """Generate a function to return selectors for a facet"""
+    lines = []
+    
+    # Add function comment
+    lines.append(f"    // Function selectors for {facet_name}")
+    
+    # Add function definition
+    lines.append(f"    function get{facet_name}Selectors() public pure returns (bytes4[] memory) {{")
+    
+    # Add selector array
+    lines.append(f"        bytes4[] memory selectors = new bytes4[]({len(selectors)});")
+    
+    # Add each selector
+    for i, (selector_hex, signature) in enumerate(selectors):
+        lines.append(f"        selectors[{i}] = bytes4({selector_hex}); /* {signature} */")
+    
+    # Close function
+    lines.append("        return selectors;")
+    lines.append("    }")
+    lines.append("")
+    
+    return lines
+
+def find_artifacts_dir(base_dir):
+    """Find the artifacts directory in the project"""
+    # Try common paths
+    for path in ["out", os.path.join(base_dir, "out")]:
+        if os.path.exists(path) and os.path.isdir(path):
+            return path
+    return None
+
+def generate_diamond_init_function(facets):
+    """Generate the init function for DiamondInit"""
+    lines = []
+    lines.append("    function init(address admin) external {")
+    lines.append("        // Each of these calls will delegate through the diamond to the respective facet")
+    lines.append("        ")
+    lines.append("        // We skip AccessControl initialization because it's already done in the BTRDiamond constructor")
+    lines.append("        // That's why our previous initialization was failing")
+    lines.append("        // Note: Admin should already have all required roles (ADMIN_ROLE, MANAGER_ROLE, etc.)")
+    lines.append("        ")
+    lines.append("        bool success;")
+    lines.append("        ")
+    
+    # For each facet (except DiamondCutFacet, DiamondLoupeFacet, and AccessControl)
+    # Add initialization calls
+    for facet in facets:
+        if facet not in ["DiamondCutFacet", "DiamondLoupeFacet", "AccessControlFacet"]:
+            base_name = facet.replace("Facet", "")
+            init_method = get_initialize_method(facet)
+            
+            lines.append(f"        // Initialize {facet}")
+            lines.append(f'        bytes4 init{base_name} = bytes4(keccak256("{init_method}()"));')
+            lines.append(f"        (success,) = address(this).delegatecall(")
+            lines.append(f"            abi.encodeWithSelector(init{base_name})")
+            lines.append("        );")
+            lines.append(f'        require(success, "{base_name} initialization failed");')
+            lines.append("        ")
+    
+    lines.append("    }")
+    
+    return lines
+
+def generate_deployer(artifacts_dir=None):
+    """Generate the diamond deployer file"""
+    if not artifacts_dir:
+        artifacts_dir = find_artifacts_dir("evm")
     
     if not artifacts_dir:
-        print(f"Error: Could not find artifacts directory in {evm_dir}", file=sys.stderr)
-        sys.exit(1)
-    
-    for facet in facets:
-        artifact_file = find_artifact_file(facet, artifacts_dir)
-        
-        if artifact_file:
-            print(f"Found artifact for {facet} at {artifact_file}")
-            selectors = extract_selectors(facet, os.path.dirname(os.path.dirname(artifact_file)))
-            if selectors:
-                function_code = generate_selector_function(facet, selectors)
-                all_functions.append(function_code)
-                continue
-        
-        print(f"Warning: No selectors found for {facet}", file=sys.stderr)
-        # Generate empty selector function
-        empty_function = f"""
-    // Function selectors for {facet}
-    function get{facet}Selectors() internal pure returns (bytes4[] memory) {{
-        bytes4[] memory selectors = new bytes4[](0);
-        return selectors;
-    }}"""
-        all_functions.append(empty_function)
-    
-    return "\n".join(all_functions)
+        print("Error: Could not find artifacts directory", file=sys.stderr)
+        return False
 
-def generate_facet_deployment(facets):
-    """Generate code for facet deployment"""
-    lines = []
-    lines.append(f"        // Initialize arrays")
-    lines.append(f"        address[] memory facets = new address[]({len(facets)});")
-    lines.append(f"        string[] memory facetNames = new string[]({len(facets)});")
-    lines.append("")
-    lines.append(f"        // Deploy facets")
-    
-    for i, facet in enumerate(facets):
-        var_name = facet[0].lower() + facet[1:]
-        lines.append(f"        {facet} {var_name} = new {facet}();")
-        lines.append(f"        facets[{i}] = address({var_name});")
-        lines.append(f'        facetNames[{i}] = "{facet}";')
-        lines.append("")
-    
-    lines.append("        // Deploy initializer")
-    lines.append("        DiamondInit diamondInit = new DiamondInit();")
-    
-    return '\n'.join(lines)
-
-def generate_diamond_init(facets):
-    """Generate code for diamond initialization"""
-    lines = []
-    lines.append(f"        // Prepare facet cuts")
-    lines.append(f"        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[]({len(facets)});")
-    lines.append("")
-    
-    for i, facet in enumerate(facets):
-        lines.append(f"        cuts[{i}] = IDiamondCut.FacetCut({{")
-        lines.append(f"            facetAddress: facets[{i}],")
-        lines.append(f"            action: IDiamondCut.FacetCutAction.Add,")
-        lines.append(f"            functionSelectors: get{facet}Selectors()")
-        lines.append(f"        }});")
-        lines.append("")
-    
-    lines.append(f"        // Execute diamond cut and initialize")
-    lines.append(f"        bytes memory calldata_ = abi.encodeWithSelector(DiamondInit.init.selector, admin);")
-    lines.append(f"        IDiamondCut(diamond).diamondCut(cuts, diamondInit, calldata_);")
-    
-    return '\n'.join(lines)
-
-def process_template(template_path, output_path, facets, evm_dir):
-    """Process the template file and generate the output file"""
-    try:
-        with open(template_path, 'r') as f:
-            template = f.read()
-    except Exception as e:
-        print(f"Error: Failed to read template file {template_path}: {e}", file=sys.stderr)
-        sys.exit(1)
-    
-    # Replace placeholders
-    template = template.replace('// FACET_IMPORTS_PLACEHOLDER', generate_facet_imports(facets))
-    template = template.replace('// SELECTOR_FUNCTIONS_PLACEHOLDER', generate_all_selector_functions(facets, evm_dir))
-    template = template.replace('// DEPLOY_FACETS_PLACEHOLDER', generate_facet_deployment(facets))
-    template = template.replace('// INITIALIZE_DIAMOND_PLACEHOLDER', generate_diamond_init(facets))
-    
-    # Write the output file
-    try:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'w') as f:
-            f.write(template)
-    except Exception as e:
-        print(f"Error: Failed to write output file {output_path}: {e}", file=sys.stderr)
-        sys.exit(1)
-    
-    print(f"Diamond deployer generated at {output_path}")
-
-def generate_deployer(facets):
-    """Generate the deployer file - without building"""
     print("Generating diamond deployer...")
     
-    # Navigate to the evm directory
-    evm_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "evm")
-    if not os.path.exists(evm_dir):
-        print(f"Error: evm directory not found at {evm_dir}", file=sys.stderr)
-        sys.exit(1)
-    
-    current_dir = os.getcwd()
-    os.chdir(evm_dir)
-    
-    # Define file paths
-    template_path = os.path.join(os.path.dirname(evm_dir), "scripts", "templates", "DiamondDeployer.sol.tpl")
-    output_path = os.path.join(evm_dir, "utils", "DiamondDeployer.sol")
-    
-    # Ensure the output directory exists
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    # Remove existing deployer file
-    if os.path.exists(output_path):
-        os.remove(output_path)
-    
-    # Process the template
-    process_template(template_path, output_path, facets, evm_dir)
-    
-    # Return to the original directory
-    os.chdir(current_dir)
-
-def main():
-    # List of facets to process (excluding abstract facets and interfaces)
+    # List of facets to include
     facets = [
         "DiamondCutFacet",
         "DiamondLoupeFacet",
@@ -193,8 +235,94 @@ def main():
         "TreasuryFacet"
     ]
     
-    # Generate the deployer (no build)
-    generate_deployer(facets)
+    # Get selectors for each facet
+    facet_selectors = {}
+    for facet in facets:
+        selectors = get_facet_selectors(facet, artifacts_dir)
+        if selectors is None:
+            print(f"Error: Could not get selectors for {facet}", file=sys.stderr)
+            return False
+        facet_selectors[facet] = selectors
+    
+    # Load the template file
+    template_file = os.path.join("scripts", "templates", "DiamondDeployer.sol.tpl")
+    if not os.path.exists(template_file):
+        print(f"Error: Template file not found at {template_file}", file=sys.stderr)
+        return False
+    
+    try:
+        with open(template_file, 'r') as f:
+            template = f.read()
+    except Exception as e:
+        print(f"Error reading template file: {e}", file=sys.stderr)
+        return False
+    
+    # Replace facet imports
+    facet_imports = []
+    for facet in facets:
+        facet_imports.append(f'import {{{facet}}} from "@facets/{facet}.sol";')
+    template = template.replace("// FACET_IMPORTS_PLACEHOLDER", "\n".join(facet_imports))
+    
+    # Generate selector functions
+    selector_functions = []
+    for facet in facets:
+        selector_functions.extend(generate_selector_function(facet, facet_selectors[facet]))
+    template = template.replace("// SELECTOR_FUNCTIONS_PLACEHOLDER", "\n".join(selector_functions))
+    
+    # Replace DiamondInit function
+    diamond_init_function = generate_diamond_init_function(facets)
+    template = template.replace("    // DIAMOND_INIT_FUNCTION_PLACEHOLDER", "\n".join(diamond_init_function))
+    
+    # Write the file
+    try:
+        output_dir = os.path.join("evm", "utils", "generated")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, "DiamondDeployer.gen.sol")
+        with open(output_path, "w") as f:
+            f.write(template)
+        print(f"Diamond deployer generated at {output_path}")
+        return True
+    except Exception as e:
+        print(f"Error writing deployer file: {e}", file=sys.stderr)
+        return False
+
+def main():
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "extract":
+            # Extract selectors mode
+            artifacts_dir = sys.argv[2] if len(sys.argv) > 2 else "out"
+            facets = sys.argv[3:] if len(sys.argv) > 3 else []
+            
+            if not facets:
+                print("Usage: generate_deployer.py extract <artifacts_dir> <facet1> [facet2] ...", file=sys.stderr)
+                sys.exit(1)
+            
+            for facet in facets:
+                selectors = extract_selectors(facet, artifacts_dir)
+                print(generate_selector_function(facet, selectors))
+        elif sys.argv[1] == "facets":
+            # Custom facets list mode
+            facets = sys.argv[2:] if len(sys.argv) > 2 else []
+            if not facets:
+                print("Usage: generate_deployer.py facets <facet1> [facet2] ...", file=sys.stderr)
+                sys.exit(1)
+            
+            artifacts_dir = find_artifacts_dir("evm")
+            if not artifacts_dir:
+                print("Error: Could not find artifacts directory", file=sys.stderr)
+                sys.exit(1)
+            
+            for facet in facets:
+                selectors = get_facet_selectors(facet, artifacts_dir)
+                if selectors is None:
+                    print(f"Error: Could not get selectors for {facet}", file=sys.stderr)
+                    sys.exit(1)
+        else:
+            # Use custom artifacts directory
+            artifacts_dir = sys.argv[1]
+            generate_deployer(artifacts_dir)
+    else:
+        generate_deployer()
 
 if __name__ == "__main__":
     main() 

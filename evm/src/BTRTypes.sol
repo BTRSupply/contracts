@@ -355,7 +355,8 @@ struct RescueRequest {
     uint64 timestamp;        // When the rescue was requested
     address receiver;        // Address to receive the rescued tokens
     TokenType tokenType;     // Type of token (bitmask of TokenType enum)
-    bytes32[] tokens;        // For ERC20: token addresses; For ERC721/ERC1155: token IDs (encoded as bytes32)
+    address tokenAddress;    // Address of the token
+    bytes32[] tokenIds;      // Token IDs (encoded as bytes32)
 }
 
 // Storage for rescue operations

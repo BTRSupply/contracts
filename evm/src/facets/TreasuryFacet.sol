@@ -14,6 +14,12 @@ contract TreasuryFacet is PermissionedFacet {
     ║                            TREASURY                            ║
     ╚═══════════════════════════════════════════════════════════════*/
 
+    /// @notice Initialize the facet
+    /// @dev Can only be called once by admin
+    function initializeTreasury() external onlyAdmin {
+        // No initialization needed for TreasuryFacet
+    }
+
     // protocol level fees
     function setFees(uint32 vaultId, Fees calldata fees) external onlyManager {
         T.setFees(vaultId, fees);

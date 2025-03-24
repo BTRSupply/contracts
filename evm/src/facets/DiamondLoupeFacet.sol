@@ -4,6 +4,8 @@ pragma solidity 0.8.28;
 import {LibDiamond} from "@libraries/LibDiamond.sol";
 import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 import {Diamond, ErrorType} from "@/BTRTypes.sol";
@@ -11,6 +13,7 @@ import {Diamond, ErrorType} from "@/BTRTypes.sol";
 /// @title Diamond Loupe Facet
 /// @dev Provides functions for inspecting the diamond's facets and functions
 contract DiamondLoupeFacet is IDiamondLoupe, IERC165 {
+
   /// @notice Gets all facets and their selectors
   /// @return facets_ Array of facet information
   function facets() external view override returns (Facet[] memory facets_) {
@@ -137,6 +140,10 @@ contract DiamondLoupeFacet is IDiamondLoupe, IERC165 {
   /// @return bool Whether the contract implements the interface
   function supportsInterface(bytes4 _interfaceId) external view override returns (bool) {
     Diamond storage ds = S.diamond();
-    return ds.supportedInterfaces[_interfaceId];
+    return ds.supportedInterfaces[_interfaceId] ||
+        _interfaceId == type(IERC165).interfaceId ||
+        _interfaceId == type(IDiamondLoupe).interfaceId ||
+        _interfaceId == type(IERC721Receiver).interfaceId || // rescuable
+        _interfaceId == type(IERC1155Receiver).interfaceId; // rescuable
   }
 }

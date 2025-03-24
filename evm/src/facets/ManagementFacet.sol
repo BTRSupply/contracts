@@ -17,6 +17,18 @@ contract ManagementFacet is PermissionedFacet, PausableFacet, NonReentrantFacet 
     ║                             PAUSE                              ║
     ╚═══════════════════════════════════════════════════════════════*/
 
+    /// @notice Initialize the facet
+    /// @dev Can only be called once by admin
+    function initializeManagement() external onlyAdmin {
+        // Initialize management facet with default restrictions
+        M.initializeRestrictions(
+            true,  // restrictSwapCaller - enabled by default for security
+            true,  // restrictSwapRouter - enabled by default for security
+            false, // approveMax - disabled by default for security
+            true   // autoRevoke - enabled by default for security
+        );
+    }
+
     // protocol level pause
     function pause() external onlyManager {
         M.pause(0);
@@ -205,20 +217,6 @@ contract ManagementFacet is PermissionedFacet, PausableFacet, NonReentrantFacet 
 
     function isAutoRevoke() external view returns (bool) {
         return M.isAutoRevoke();
-    }
-
-    function initializeRestrictions(
-        bool restrictSwapCaller,
-        bool restrictSwapRouter,
-        bool approveMax,
-        bool autoRevoke
-    ) external onlyAdmin {
-        M.initializeRestrictions(
-            restrictSwapCaller,
-            restrictSwapRouter,
-            approveMax,
-            autoRevoke
-        );
     }
 
     /*═══════════════════════════════════════════════════════════════╗
