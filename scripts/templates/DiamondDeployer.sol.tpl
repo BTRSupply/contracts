@@ -8,19 +8,10 @@ import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
 import {IERC173} from "@interfaces/ercs/IERC173.sol";
 import {IERC165} from "@interfaces/ercs/IERC165.sol";
 import {ICreateX} from "@interfaces/ICreateX.sol";
+import {IDiamondCut, IDiamondInit, IDiamondCutCallback} from "@interfaces/IDiamond.sol";
 
 // Facet imports
 // FACET_IMPORTS_PLACEHOLDER
-
-// Interface to allow admin to call diamondCut
-interface IDiamondInit {
-    function init(address admin) external;
-}
-
-// Diamond Cut Callback interface
-interface IDiamondCutCallback {
-    function diamondCutCallback(address diamond, IDiamondCut.FacetCut[] memory cuts, address init, bytes memory _calldata) external;
-}
 
 // Diamond initializer contract to avoid stack too deep errors
 contract DiamondInit {

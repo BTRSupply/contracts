@@ -259,22 +259,38 @@ contract TreasuryTest is BaseTest {
     ==============================================================*/
     
     function testDefaultFees() public {
-        // Test setting default fees
-        Fees memory fees = _createFees(100, 200, 300, 1000, 50);
+        // Test setting default fees - test each fee type in isolation
+        Fees memory entryOnlyFees = _createFees(100, 0, 0, 0, 0);
+        Fees memory exitOnlyFees = _createFees(0, 200, 0, 0, 0);
+        Fees memory mgmtOnlyFees = _createFees(0, 0, 300, 0, 0);
+        Fees memory perfOnlyFees = _createFees(0, 0, 0, 1000, 0);
+        Fees memory flashOnlyFees = _createFees(0, 0, 0, 0, 50);
         
-        vm.prank(manager);
-        treasuryFacet.setDefaultFees(fees);
+        // Test each fee type individually
+        vm.startPrank(manager);
+        treasuryFacet.setDefaultFees(entryOnlyFees);
+        _verifyFees(treasuryFacet.getFees(), entryOnlyFees, "Entry-only fees");
         
-        // Verify default fees
-        _verifyFees(treasuryFacet.getFees(), fees, "Default fees");
+        treasuryFacet.setDefaultFees(exitOnlyFees);
+        _verifyFees(treasuryFacet.getFees(), exitOnlyFees, "Exit-only fees");
+        
+        treasuryFacet.setDefaultFees(mgmtOnlyFees);
+        _verifyFees(treasuryFacet.getFees(), mgmtOnlyFees, "Management-only fees");
+        
+        treasuryFacet.setDefaultFees(perfOnlyFees);
+        _verifyFees(treasuryFacet.getFees(), perfOnlyFees, "Performance-only fees");
+        
+        treasuryFacet.setDefaultFees(flashOnlyFees);
+        _verifyFees(treasuryFacet.getFees(), flashOnlyFees, "Flash-only fees");
+        vm.stopPrank();
         
         // Non-manager cannot set default fees
         vm.prank(user);
         vm.expectRevert();
-        treasuryFacet.setDefaultFees(fees);
+        treasuryFacet.setDefaultFees(entryOnlyFees);
         
         // Test fee validation - entry fee exceeds max
-        Fees memory invalidFees = _createFees(10000, 200, 300, 1000, 50); // 100% (exceeds max of 50%)
+        Fees memory invalidFees = _createFees(10000, 0, 0, 0, 0); // 100% (exceeds max of 50%)
         
         vm.prank(manager);
         vm.expectRevert();
@@ -288,10 +304,9 @@ contract TreasuryTest is BaseTest {
     function testEntryFees() public {
         _ensureVaultExists();
         
-        // Set specific vault fees (10% entry fee)
-        Fees memory vaultFees = _createFees(1000, 300, 200, 2000, 100);
+        // Set only entry fee (10% entry fee)
+        Fees memory vaultFees = _createFees(1000, 0, 0, 0, 0);
         if (!_setVaultFees(vaultId, vaultFees)) {
-            // Skip test if vault fees can't be set
             return;
         }
         
@@ -330,12 +345,12 @@ contract TreasuryTest is BaseTest {
             "Entry fee token0 collected correctly"
         );
         
-        // Verify fee is approximately 10% of deposit
+        // Verify fee is exactly 10% of deposit
         assertApproxEqRel(
             expectedFee0, 
             depositAmount * 10 / 100, 
             0.01e18, 
-            "Entry fee token0 should be approximately 10% of deposit"
+            "Entry fee token0 should be exactly 10% of deposit"
         );
     }
     
@@ -346,8 +361,8 @@ contract TreasuryTest is BaseTest {
     function testExitFees() public {
         _ensureVaultExists();
         
-        // Set specific vault fees (10% exit fee)
-        Fees memory vaultFees = _createFees(500, 1000, 200, 2000, 100);
+        // Set only exit fee (10% exit fee)
+        Fees memory vaultFees = _createFees(0, 1000, 0, 0, 0);
         if (!_setVaultFees(vaultId, vaultFees)) return;
         
         // Make a deposit
@@ -394,12 +409,12 @@ contract TreasuryTest is BaseTest {
             "Exit fee token0 collected correctly"
         );
         
-        // Verify fee is approximately 10% of withdrawal
+        // Verify fee is exactly 10% of withdrawal
         assertApproxEqRel(
             expectedFee0, 
             expectedAmount0 * 10 / 100, 
             0.01e18, 
-            "Exit fee token0 should be approximately 10% of withdrawal"
+            "Exit fee token0 should be exactly 10% of withdrawal"
         );
     }
     
@@ -410,8 +425,8 @@ contract TreasuryTest is BaseTest {
     function testManagementFees() public {
         _ensureVaultExists();
         
-        // Set specific vault fees (2% annual management fee)
-        Fees memory vaultFees = _createFees(500, 300, 200, 2000, 100);
+        // Set only management fee (2% annual management fee)
+        Fees memory vaultFees = _createFees(0, 0, 200, 0, 0);
         if (!_setVaultFees(vaultId, vaultFees)) return;
         
         // Make a deposit
@@ -437,10 +452,15 @@ contract TreasuryTest is BaseTest {
         uint256 finalFees0 = _getAccruedFees(vaultId, IERC20(address(token0)));
         uint256 finalFees1 = _getAccruedFees(vaultId, IERC20(address(token1)));
         
-        // We should have about 0.5% management fee accrued (2% annual for ~1/4 year)
-        assert(
-            finalFees0 > initialFees0 && 
-            finalFees1 > initialFees1
+        // Calculate expected fees (2% annual for ~1/4 year = ~0.5%)
+        uint256 expectedFee0 = depositAmount * 50 / 10000; // 0.5% of deposit
+        
+        // Verify management fees
+        assertApproxEqRel(
+            finalFees0 - initialFees0,
+            expectedFee0,
+            0.01e18,
+            "Management fee token0 should be approximately 0.5% after 3 months"
         );
     }
     
@@ -451,8 +471,8 @@ contract TreasuryTest is BaseTest {
     function testPerformanceFees() public {
         _ensureVaultExists();
         
-        // Set specific vault fees (30% performance fee)
-        Fees memory vaultFees = _createFees(500, 300, 200, 3000, 100);
+        // Set only performance fee (30% performance fee)
+        Fees memory vaultFees = _createFees(0, 0, 0, 3000, 0);
         if (!_setVaultFees(vaultId, vaultFees)) return;
         
         // Make a deposit
@@ -481,19 +501,86 @@ contract TreasuryTest is BaseTest {
         uint256 finalFees0 = _getAccruedFees(vaultId, IERC20(address(token0)));
         uint256 finalFees1 = _getAccruedFees(vaultId, IERC20(address(token1)));
         
-        // Verify performance fees (30% of LP fees)
+        // Verify performance fees (exactly 30% of LP fees)
         assertApproxEqRel(
             finalFees0 - initialFees0,
             lpFees0 * 30 / 100, 
             0.01e18,
-            "Performance fee token0 should be 30% of LP fees"
+            "Performance fee token0 should be exactly 30% of LP fees"
         );
         
         assertApproxEqRel(
             finalFees1 - initialFees1,
             lpFees1 * 30 / 100, 
             0.01e18,
-            "Performance fee token1 should be 30% of LP fees"
+            "Performance fee token1 should be exactly 30% of LP fees"
+        );
+    }
+    
+    /*==============================================================
+                        COMBINED FEES TEST
+    ==============================================================*/
+    
+    function testCombinedFees() public {
+        _ensureVaultExists();
+        
+        // Set multiple fees (5% entry, 3% exit, 2% management, 20% performance)
+        Fees memory vaultFees = _createFees(500, 300, 200, 2000, 0);
+        if (!_setVaultFees(vaultId, vaultFees)) return;
+        
+        // Make initial deposit
+        uint256 depositAmount = 10000 * 10**18;
+        (uint256 mintedShares, bool depositSuccess) = _deposit(vaultId, depositAmount, depositAmount);
+        if (!depositSuccess) return;
+        
+        // Verify entry fee (5% of deposit)
+        uint256 expectedEntryFee = depositAmount * 5 / 100;
+        uint256 initialPendingFees = _getPendingFees(vaultId, IERC20(address(token0)));
+        assertApproxEqRel(
+            initialPendingFees,
+            expectedEntryFee,
+            0.01e18,
+            "Combined entry fee should be exactly 5%"
+        );
+        
+        // Advance time by ~6 months (182.5 days)
+        vm.warp(block.timestamp + 15778800);
+        
+        // Simulate LP earnings
+        uint256 lpFees = 100 * 10**18;
+        token0.mint(address(diamond), lpFees);
+        
+        // Trigger fee accrual with rebalance
+        if (!_rebalance(vaultId)) return;
+        
+        // Calculate expected management fee (1% for half year)
+        uint256 expectedMgmtFee = depositAmount * 100 / 10000; // 1% of deposit
+        
+        // Calculate expected performance fee (20% of LP fees)
+        uint256 expectedPerfFee = lpFees * 20 / 100;
+        
+        // Get total accrued fees
+        uint256 accruedFees = _getAccruedFees(vaultId, IERC20(address(token0)));
+        
+        // Verify combined management and performance fees
+        assertApproxEqRel(
+            accruedFees,
+            expectedMgmtFee + expectedPerfFee,
+            0.01e18,
+            "Combined management and performance fees should match expected"
+        );
+        
+        // Now test exit fee on withdrawal
+        uint256 withdrawShares = mintedShares / 2;
+        (uint256 withdrawAmount,,, uint256 exitFee, bool withdrawSuccess) = _withdraw(vaultId, withdrawShares);
+        if (!withdrawSuccess) return;
+        
+        // Verify exit fee (3% of withdrawal amount)
+        assertApproxEqRel(
+            exitFee,
+            withdrawAmount * 3 / 100,
+            0.01e18,
+            "Combined exit fee should be exactly 3%"
         );
     }
     

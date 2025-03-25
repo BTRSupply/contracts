@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
+import {IDiamondCut} from "@interfaces/IDiamond.sol";
 import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 import {Diamond, FacetAddressAndPosition, FacetFunctionSelectors, ErrorType} from "@/BTRTypes.sol";
 import {LibAccessControl as AC} from "@libraries/LibAccessControl.sol";

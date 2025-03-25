@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {BaseTest} from "../BaseTest.t.sol";
 import {AccessControlFacet} from "@facets/AccessControlFacet.sol";
-import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
+import {IDiamondLoupe} from "@interfaces/IDiamond.sol";
 
 contract DiamondDeploymentTest is BaseTest {
     function setUp() public override {

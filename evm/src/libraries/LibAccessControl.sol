@@ -32,13 +32,41 @@ library LibAccessControl {
     ║                            VIEW                                ║
     ╚═══════════════════════════════════════════════════════════════*/
 
+    function _getMember0(bytes32 role) internal view returns (address) {
+        address[] memory members = getMembers(role);
+        return members.length > 0 ? members[0] : address(0);
+    }
+
     /// @notice Get the primary admin address
     /// @return The first admin in the list, or address(0) if none
     function admin() internal view returns (address) {
-        address[] memory admins = getMembers(ADMIN_ROLE);
-        return admins.length > 0 ? admins[0] : address(0);
+        return _getMember0(ADMIN_ROLE);
     }
 
+    /// @notice Get the treasury address
+    /// @return The first treasury in the list, or address(0) if none
+    function treasury() internal view returns (address) {
+        return _getMember0(TREASURY_ROLE);
+    }
+
+    /// @return Array of addresses with the manager role
+    function getManagers() internal view returns (address[] memory) {
+        return getMembers(MANAGER_ROLE);
+    }
+    
+    /// @notice Get the keeper addresses
+    /// @return Array of addresses with the keeper role
+    function getKeepers() internal view returns (address[] memory) {
+        return getMembers(KEEPER_ROLE);
+    }
+
+    /// @notice Check if an account is blacklisted
+    /// @param account The account to check
+    /// @return True if the account is blacklisted
+    function isBlacklisted(address account) internal view returns (bool) {
+        return S.accessControl().blacklist.contains(account);
+    }
+    
     /// @notice Check if an account has a role
     /// @param role The role to check
     /// @param account The account to check

@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import "@/BTRTypes.sol";
-import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
+import {IDiamondCut} from "@interfaces/IDiamond.sol";
 
 /**
  * @title BTREvents

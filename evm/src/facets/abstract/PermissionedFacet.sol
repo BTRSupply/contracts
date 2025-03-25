@@ -62,4 +62,24 @@ abstract contract PermissionedFacet {
     function isTreasury(address account) external view returns (bool) {
         return hasRole(AC.TREASURY_ROLE, account);
     }
+    
+    function admin() external view returns (address) {
+        return AC.admin();
+    }
+
+    function treasury() external view returns (address) {
+        return AC.treasury();
+    }
+
+    function getManagers() external view returns (address[] memory) {
+        return AC.getMembers(AC.MANAGER_ROLE);
+    }
+
+    function getKeepers() external view returns (address[] memory) {
+        return AC.getMembers(AC.KEEPER_ROLE);
+    }
+    
+    function isBlacklisted(address account) external view returns (bool) {
+        return AC.isBlacklisted(account);
+    }
 }

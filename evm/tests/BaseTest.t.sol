@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import {DiamondDeployer, IDiamondCutCallback} from "@utils/generated/DiamondDeployer.gen.sol";
 import {AccessControlFacet} from "@facets/AccessControlFacet.sol";
 import {LibAccessControl} from "@libraries/LibAccessControl.sol";
-import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
+import {IDiamondCut} from "@interfaces/IDiamond.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";

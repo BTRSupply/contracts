@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {LibDiamond as D} from "@libraries/LibDiamond.sol";
-import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
+import {IDiamondCut} from "@interfaces/IDiamond.sol";
 import {PermissionedFacet} from "@facets/abstract/PermissionedFacet.sol";
 import {NonReentrantFacet} from "@facets/abstract/NonReentrantFacet.sol";
 import {LibAccessControl as AC} from "@libraries/LibAccessControl.sol";

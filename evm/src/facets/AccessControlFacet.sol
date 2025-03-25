@@ -59,6 +59,11 @@ contract AccessControlFacet is PermissionedFacet, NonReentrantFacet, IERC173 {
         return AC.admin();
     }
 
+    /// @notice Get the treasury of the contract
+    function treasury() external view returns (address) {
+        return AC.treasury();
+    }
+
     /// @notice Get all managers
     function getManagers() external view returns (address[] memory) {
         return AC.getMembers(AC.MANAGER_ROLE);

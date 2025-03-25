@@ -3,8 +3,7 @@ pragma solidity 0.8.28;
 
 // Core imports
 import {BTRDiamond} from "@/BTRDiamond.sol";
-import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
-import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
+import {IDiamondCut, IDiamondLoupe, IDiamondInit, IDiamondCutCallback} from "@interfaces/IDiamond.sol";
 import {IERC173} from "@interfaces/ercs/IERC173.sol";
 import {IERC165} from "@interfaces/ercs/IERC165.sol";
 import {ICreateX} from "@interfaces/ICreateX.sol";
@@ -18,16 +17,6 @@ import {RescueFacet} from "@facets/RescueFacet.sol";
 import {SwapperFacet} from "@facets/SwapperFacet.sol";
 import {ALMFacet} from "@facets/ALMFacet.sol";
 import {TreasuryFacet} from "@facets/TreasuryFacet.sol";
-
-// Interface to allow admin to call diamondCut
-interface IDiamondInit {
-    function init(address admin) external;
-}
-
-// Diamond Cut Callback interface
-interface IDiamondCutCallback {
-    function diamondCutCallback(address diamond, IDiamondCut.FacetCut[] memory cuts, address init, bytes memory _calldata) external;
-}
 
 // Diamond initializer contract to avoid stack too deep errors
 contract DiamondInit {
@@ -564,4 +553,4 @@ contract DiamondDeployer {
             facets: new address[](0)
         });
     }
-} 
+}

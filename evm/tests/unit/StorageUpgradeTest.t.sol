@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import {BaseTest} from "../BaseTest.t.sol";
 import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 import {Diamond, FacetAddressAndPosition} from "@/BTRTypes.sol";
-import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
+import {IDiamondLoupe} from "@interfaces/IDiamond.sol";
 
 /**
  * @title StorageUpgradeTest

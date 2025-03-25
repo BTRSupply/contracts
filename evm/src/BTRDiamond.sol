@@ -18,15 +18,14 @@ pragma solidity 0.8.28;
 
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
-import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
+import {IDiamondCut, IDiamondLoupe, IDiamond} from "@interfaces/IDiamond.sol";
 import {LibAccessControl as AC} from "@libraries/LibAccessControl.sol";
 import {LibDiamond as D} from "@libraries/LibDiamond.sol";
 import {AccessControl, Diamond, ErrorType} from "@/BTRTypes.sol";
 import {BTRErrors as Errors} from "@libraries/BTREvents.sol";
 import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 
-contract BTRDiamond {
+contract BTRDiamond is IDiamond {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     constructor(address _owner, address _diamondCutFacet) payable {
