@@ -1,75 +1,69 @@
 #!/bin/bash
-set -e  # Exit on error
+set -e
 
-# Navigate to the root directory of the project
-cd "$(dirname "$0")/.." || { echo "Error: Could not navigate to project root"; exit 1; }
+# Set the project root directory regardless of where the script is called from
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$PROJECT_ROOT"
 
-echo "=== Smart Contract Deployment Generator ==="
+# Default options
+USE_VIA_IR=false
+SHOW_SIZES=false
 
-# Step 1: Initial build to compile only the core facets and generate artifacts
-echo "Step 1: Building facets to generate artifacts..."
-cd evm || { echo "Error: evm directory not found"; exit 1; }
+# Parse arguments
+for arg in "$@"; do
+  case $arg in
+    --via-ir)
+      USE_VIA_IR=true
+      ;;
+    --sizes)
+      SHOW_SIZES=true
+      ;;
+  esac
+done
 
-# Create generated directory
-mkdir -p utils/generated
-
-# Remove existing DiamondDeployer if it exists
-if [ -f "utils/generated/DiamondDeployer.gen.sol" ]; then
-  rm -f "utils/generated/DiamondDeployer.gen.sol"
+# Build options
+BUILD_OPTS=""
+if [ "$USE_VIA_IR" = true ]; then
+  BUILD_OPTS="$BUILD_OPTS --via-ir"
+fi
+if [ "$SHOW_SIZES" = true ]; then
+  BUILD_OPTS="$BUILD_OPTS --sizes"
 fi
 
-# Temporarily zipping dependent folders to exclude them from build
-echo "Temporarily zipping dependent folders..."
-[ -d "scripts" ] && zip -q -r scripts.zip scripts && rm -rf scripts
-[ -d "test" ] && zip -q -r test.zip test && rm -rf test
-[ -d "tests" ] && zip -q -r tests.zip tests && rm -rf tests
-[ -d "utils" ] && zip -q -r utils.zip utils && rm -rf utils
+# Clean previous artifacts if any
+rm -rf "$PROJECT_ROOT/evm/out/"
 
-# Run initial build withping dependent folders removed
-echo "Building core facets..."
-forge build --via-ir || { 
-  echo "Error: Initial facet build failed"
-  
-  # Restore zipped folders even on failure
-  [ -f "scripts.zip" ] && unzip -q scripts.zip && rm scripts.zip
-  [ -f "test.zip" ] && unzip -q test.zip && rm test.zip
-  [ -f "tests.zip" ] && unzip -q tests.zip && rm tests.zip
-  [ -f "utils.zip" ] && unzip -q utils.zip && rm utils.zip
-  
-  exit 1
-}
+echo "=== Compiling facets ==="
+# First compilation: only compile facets, excluding scripts and tests
+# Save original files
+(cd "$PROJECT_ROOT/evm" && mkdir -p .tmp)
+if [ -d "$PROJECT_ROOT/evm/scripts" ]; then
+  mv "$PROJECT_ROOT/evm/scripts" "$PROJECT_ROOT/evm/.tmp/"
+fi
+if [ -d "$PROJECT_ROOT/evm/tests" ]; then
+  mv "$PROJECT_ROOT/evm/tests" "$PROJECT_ROOT/evm/.tmp/"
+fi
 
-# Restore the zipped folders
-echo "Restoring temporarily removed folders..."
-[ -f "scripts.zip" ] && unzip -q scripts.zip && rm scripts.zip
-[ -f "test.zip" ] && unzip -q test.zip && rm test.zip
-[ -f "tests.zip" ] && unzip -q tests.zip && rm tests.zip
-[ -f "utils.zip" ] && unzip -q utils.zip && rm utils.zip
+# Compile only facets
+cd "$PROJECT_ROOT/evm"
+forge build --names --skip test $BUILD_OPTS
 
-# Step 2: Run Python generator to create DiamondDeployer.gen.sol
-echo "Step 2: Generating DiamondDeployer.gen.sol using Python..."
-cd ..
+# Restore scripts and tests
+if [ -d "$PROJECT_ROOT/evm/.tmp/scripts" ]; then
+  mv "$PROJECT_ROOT/evm/.tmp/scripts" "$PROJECT_ROOT/evm/"
+fi
+if [ -d "$PROJECT_ROOT/evm/.tmp/tests" ]; then
+  mv "$PROJECT_ROOT/evm/.tmp/tests" "$PROJECT_ROOT/evm/"
+fi
+rm -rf "$PROJECT_ROOT/evm/.tmp"
 
-# Run the generator script directly with the correct artifact path
-python3 scripts/generate_deployer.py evm/out || { echo "Error: Python generator failed"; exit 1; }
+# Then generate the deployer
+echo "=== Generating deployer ==="
+python3 "$PROJECT_ROOT/scripts/generate_deployer.py" "$PROJECT_ROOT/evm/out" || exit 1
 
-# Create a symbolic link to ensure backward compatibility
-cd evm/utils
-mkdir -p generated
-ln -sf generated/DiamondDeployer.gen.sol DiamondDeployer.sol
-cd ../..
-
-# Step 3: Update import paths in test files
-echo "Step 3: Updating import paths in test files..."
-find evm/tests -name "*.sol" -type f -exec sed -i '' 's|import {DiamondDeployer} from "@utils/DiamondDeployer.sol";|import {DiamondDeployer} from "@utils/generated/DiamondDeployer.gen.sol";|g' {} \;
-
-# Step 4: Run a full compilation to ensure everything works
-echo "Step 4: Running full compilation..."
-cd evm || { echo "Error: evm directory not found"; exit 1; }
-
-# Run full build with --via-ir flag
-forge build --via-ir || { echo "Error: Final build failed"; exit 1; }
+# Then compile everything with the generated deployer
+echo "=== Compiling with generated deployer ==="
+cd "$PROJECT_ROOT/evm"
+forge build $BUILD_OPTS
 
 echo "=== Deployment generation completed successfully ==="
-
-# This file will become setup.sh - changes here will be moved to the new file

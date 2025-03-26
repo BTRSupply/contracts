@@ -23,6 +23,7 @@ import {LibAccessControl as AC} from "@libraries/LibAccessControl.sol";
 import {LibDiamond as D} from "@libraries/LibDiamond.sol";
 import {AccessControl, Diamond, ErrorType} from "@/BTRTypes.sol";
 import {BTRErrors as Errors} from "@libraries/BTREvents.sol";
+import {BTREvents as Events} from "@libraries/BTREvents.sol";
 import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 
 contract BTRDiamond is IDiamond {
@@ -36,21 +37,30 @@ contract BTRDiamond is IDiamond {
         
         D.enforceHasContractCode(_diamondCutFacet);
         AccessControl storage acs = S.accessControl();
+        
+        // Set timelock configuration
         acs.grantDelay = AC.DEFAULT_GRANT_DELAY;
         acs.acceptWindow = AC.DEFAULT_ACCEPT_WINDOW;
 
-        // Initialize admin role
-        acs.roles[AC.ADMIN_ROLE].members.add(_owner);
+        // Initialize admin role 
+        // For initial setup, we directly grant and accept to avoid timelock issues
         acs.roles[AC.ADMIN_ROLE].adminRole = AC.ADMIN_ROLE;
+        acs.roles[AC.ADMIN_ROLE].members.add(_owner);
+        emit Events.RoleGranted(AC.ADMIN_ROLE, _owner, address(this));
+        emit Events.OwnershipTransferred(address(this), _owner);
         
-        // Initialize other roles with admin as their admin role
-        acs.roles[AC.MANAGER_ROLE].members.add(_owner);
+        // Set up roles with the admin role as their admin
         acs.roles[AC.MANAGER_ROLE].adminRole = AC.ADMIN_ROLE;
-        acs.roles[AC.KEEPER_ROLE].adminRole = AC.ADMIN_ROLE;
-        acs.roles[AC.TREASURY_ROLE].adminRole = AC.ADMIN_ROLE;
+        acs.roles[AC.MANAGER_ROLE].members.add(_owner);
+        emit Events.RoleGranted(AC.MANAGER_ROLE, _owner, address(this));
         
-        // Set treasury role and address
+        acs.roles[AC.KEEPER_ROLE].adminRole = AC.ADMIN_ROLE;
+        
+        acs.roles[AC.TREASURY_ROLE].adminRole = AC.ADMIN_ROLE;
         acs.roles[AC.TREASURY_ROLE].members.add(_treasury);
+        emit Events.RoleGranted(AC.TREASURY_ROLE, _treasury, address(this));
+        
+        // Set treasury address
         S.core().treasury.treasury = _treasury;
         
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);

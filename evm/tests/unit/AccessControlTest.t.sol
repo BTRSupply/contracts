@@ -22,11 +22,16 @@ contract AccessControlTest is BaseTest {
     bytes32 public constant CUSTOM_ROLE = keccak256("CUSTOM_ROLE");
     
     function setUp() public override {
+        // Set the admin to the test contract address
+        admin = address(this);
+        
         // Call base setup
-        keeper = address(3);
-        treasury = address(4);
-        newAdmin = address(5);
-        user = address(6);
+        keeper = makeAddr("keeper");
+        newAdmin = makeAddr("newAdmin");
+        user = makeAddr("user");
+        
+        // Override and set the treasury separately
+        treasury = makeAddr("treasury");
         
         // Call parent setup to deploy diamond and setup roles
         super.setUp();

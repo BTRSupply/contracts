@@ -1,0 +1,87 @@
+{
+  "AccessControlFacet": {
+    "required": false,
+    "payable": false,
+    "initializable": true,
+    "ownedSelectors": [
+      "admin()",
+      "checkRole(bytes32)",
+      "checkRole(bytes32,address)",
+      "getKeepers()",
+      "getManagers()",
+      "grantRole(bytes32,address)",
+      "hasRole(bytes32,address)",
+      "isAdmin(address)",
+      "isBlacklisted(address)",
+      "isKeeper(address)",
+      "isManager(address)",
+      "isTreasury(address)",
+      "isWhitelisted(address)",
+      "revokeRole(bytes32,address)",
+      "treasury()"
+    ]
+  },
+  "DiamondCutFacet": {
+    "required": true,
+    "payable": false,
+    "initializable": false,
+    "ownedSelectors": [
+      "diamondCut((address,uint8,bytes4[])[],address,bytes)"
+    ]
+  },
+  "DiamondLoupeFacet": {
+    "required": true,
+    "payable": false,
+    "initializable": false,
+    "ownedSelectors": [
+      "facetAddress(bytes4)",
+      "facetAddresses()",
+      "facetFunctionSelectors(address)",
+      "facets()",
+      "supportsInterface(bytes4)"
+    ]
+  },
+  "ManagementFacet": {
+    "required": false,
+    "payable": false,
+    "initializable": true,
+    "ownedSelectors": [
+      "isPaused()",
+      "isPaused(uint32)",
+      "pause()",
+      "pause(uint32)",
+      "unpause()",
+      "unpause(uint32)"
+    ]
+  },
+  "RescueFacet": {
+    "required": false,
+    "payable": true,
+    "initializable": true,
+    "ownedSelectors": []
+  },
+  "SwapperFacet": {
+    "required": false,
+    "payable": false,
+    "initializable": true,
+    "ownedSelectors": [
+      "decodeAndSwap(address,address,uint256,bytes)",
+      "decodeAndSwapBalance(address,address,bytes)"
+    ]
+  },
+  "ALMFacet": {
+    "required": false,
+    "payable": false,
+    "initializable": true,
+    "ownedSelectors": []
+  },
+  "TreasuryFacet": {
+    "required": false,
+    "payable": false,
+    "initializable": true,
+    "ownedSelectors": [
+      "getTreasury()",
+      "setTreasury(address)"
+    ]
+  }
+} 

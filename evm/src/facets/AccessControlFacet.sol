@@ -59,8 +59,8 @@ contract AccessControlFacet is PermissionedFacet, NonReentrantFacet, IERC173 {
     ╚═══════════════════════════════════════════════════════════════*/
 
     /// @notice Initialize access control with the first admin
-    function initializeAccessControl(address initialAdmin) external {
-        AC.initialize(initialAdmin);
+    function initializeAccessControl() external {
+        // No-op since initialization is handled in the diamond constructor
     }
 
     /// @notice Set the admin role for a role

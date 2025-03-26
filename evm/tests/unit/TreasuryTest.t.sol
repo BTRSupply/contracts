@@ -171,7 +171,7 @@ contract TreasuryTest is BaseTest {
         }
         
         // Create a mock treasury address
-        treasuryAddress = address(0x9876);
+        treasuryAddress = treasury;
         
         // Create a regular user address for permission tests
         user = address(0xABCD);
@@ -242,7 +242,7 @@ contract TreasuryTest is BaseTest {
         treasuryFacet.setTreasury(treasuryAddress);
         
         // Set to a new address should work
-        address newTreasury = address(0x5678);
+        address newTreasury = address(uint160(uint256(keccak256("new_treasury_address"))));
         vm.prank(admin);
         treasuryFacet.setTreasury(newTreasury);
         

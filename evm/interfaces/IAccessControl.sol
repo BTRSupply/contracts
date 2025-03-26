@@ -19,7 +19,7 @@ interface IAccessControl is IPermissioned, IERC173 {
     function getManagers() external view returns (address[] memory);
     function getKeepers() external view returns (address[] memory);
 
-    function initializeAccessControl(address initialAdmin) external;
+    function initializeAccessControl() external;
     function setRoleAdmin(bytes32 role, bytes32 adminRole) external;
     function setTimelockConfig(uint256 grantDelay, uint256 acceptWindow) external;
     function grantRole(bytes32 role, address account) external;

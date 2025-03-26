@@ -9,19 +9,20 @@ contract DeployDiamondScript is Script {
     function setUp() public {}
 
     function run() public {
-        // Get admin from env or use msg.sender
-        address admin = vm.envOr("DEPLOYER", msg.sender);
-        address treasury = vm.envOr("TREASURY", address(0x1234));
+        // Get deployer from env variable
+        uint256 deployerPk = vm.envUint("DEPLOYER_PK");
+        address deployer = vm.addr(deployerPk);
+        address treasury = vm.envOr("TREASURY", address(0));
         
-        uint256 privateKey = vm.envUint("PRIVATE_KEY");
-        vm.startBroadcast(privateKey);
+        if (treasury == address(0)) {
+            console.log("Warning: Using zero address for treasury. Set TREASURY environment variable.");
+        }
         
-        // For quick local deployments
-        // vm.startBroadcast();
+        vm.startBroadcast(deployerPk);
         
         // Deploy diamond and its facets
         DiamondDeployer diamondDeployer = new DiamondDeployer();
-        DiamondDeployer.Deployment memory deployment = diamondDeployer.deployDiamond(admin, treasury);
+        DiamondDeployer.Deployment memory deployment = diamondDeployer.deployDiamond(deployer, treasury);
         
         vm.stopBroadcast();
         

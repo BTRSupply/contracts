@@ -31,7 +31,7 @@ contract DeployDeterministic is Script {
         // Define salts for each contract
         DiamondDeployer.Salts memory salts;
         salts.diamond = keccak256(bytes("btr.diamond.v1"));
-        salts.diamondCut = keccak256(bytes("btr.diamondCut.v1"));
+        salts.diamond_cut = keccak256(bytes("btr.diamondCut.v1"));
         // Leave other salts as bytes32(0) to use default generation
         
         // Predict addresses
@@ -43,7 +43,7 @@ contract DeployDeterministic is Script {
         );
         
         console2.log("Deployer address:", deployer);
-        console2.log("Predicted DiamondCutFacet address:", predicted.diamondCutFacet);
+        console2.log("Predicted DiamondCutFacet address:", predicted.diamond_cut);
         console2.log("Predicted Diamond address:", predicted.diamond);
         
         // Demonstrate that a different deployer would get different addresses
@@ -56,7 +56,7 @@ contract DeployDeterministic is Script {
         );
         
         console2.log("Another deployer:", anotherDeployer);
-        console2.log("Another deployer's DiamondCutFacet address:", anotherPredicted.diamondCutFacet);
+        console2.log("Another deployer's DiamondCutFacet address:", anotherPredicted.diamond_cut);
         console2.log("Another deployer's Diamond address:", anotherPredicted.diamond);
         
         // Start actual deployment
@@ -73,14 +73,14 @@ contract DeployDeterministic is Script {
         vm.stopBroadcast();
         
         // Verify addresses match predictions
-        console2.log("Actual DiamondCutFacet address:", deployed.diamondCutFacet);
+        console2.log("Actual DiamondCutFacet address:", deployed.diamond_cut);
         console2.log("Actual Diamond address:", deployed.diamond);
         
-        require(deployed.diamondCutFacet == predicted.diamondCutFacet, "DiamondCutFacet address mismatch");
+        require(deployed.diamond_cut == predicted.diamond_cut, "DiamondCutFacet address mismatch");
         require(deployed.diamond == predicted.diamond, "Diamond address mismatch");
         
         // Confirm addresses are different from other deployer's addresses
-        require(deployed.diamondCutFacet != anotherPredicted.diamondCutFacet, "Addresses should be different for different deployers");
+        require(deployed.diamond_cut != anotherPredicted.diamond_cut, "Addresses should be different for different deployers");
         require(deployed.diamond != anotherPredicted.diamond, "Addresses should be different for different deployers");
     }
 } 

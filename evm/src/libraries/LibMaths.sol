@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 /// @notice Helper library for type casting
-library AsCast {
+library LibCast {
 
   error ValueOutOfCastRange();
 
@@ -20,8 +20,8 @@ library AsCast {
 }
 
 library LibMaths {
-  using AsCast for uint256;
-  using AsCast for int256;
+  using LibCast for uint256;
+  using LibCast for int256;
 
   // Add enum for rounding directions to maintain compatibility
   enum Rounding {
@@ -314,7 +314,7 @@ library LibMaths {
   }
 
   function subNoNeg(int256 a, int256 b) internal pure returns (int256) {
-    if (a < b) revert AsCast.ValueOutOfCastRange();
+    if (a < b) revert LibCast.ValueOutOfCastRange();
     unchecked {
       return a - b;
     }
