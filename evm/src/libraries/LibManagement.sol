@@ -8,6 +8,7 @@ import {BTRUtils} from "@libraries/BTRUtils.sol";
 import {LibAccessControl as AC} from "@libraries/LibAccessControl.sol";
 import {LibPausable as P} from "@libraries/LibPausable.sol";
 import {LibMaths as M} from "@libraries/LibMaths.sol";
+import {LibTreasury as T} from "@libraries/LibTreasury.sol";
 import {AccountStatus as AS, AddressType, ErrorType, Fees, CoreStorage, ALMVault, Oracles, Range, Registry} from "@/BTRTypes.sol";
 import {LibBitMask} from "@libraries/LibBitMask.sol";
 
@@ -178,67 +179,50 @@ library LibManagement {
     ╚═══════════════════════════════════════════════════════════════*/
 
     function getTreasury() internal view returns (address) {
-        return S.core().treasury.treasury;
+        return T.getTreasury();
     }
-
+    
     function setTreasury(address treasury) internal {
-        if (treasury == address(0)) revert Errors.ZeroAddress();
-        CoreStorage storage cs = S.core();
-        if (treasury == cs.treasury.treasury) revert Errors.AlreadyExists(ErrorType.ADDRESS);
-
-        // Revoke the previous treasury if it exists
-        if (cs.treasury.treasury != address(0)) {
-            AC.revokeRole(AC.TREASURY_ROLE, cs.treasury.treasury);
-        }
-
-        // Update treasury address
-        AC.grantRole(AC.TREASURY_ROLE, treasury);
-        cs.treasury.treasury = treasury;
-        emit Events.TreasuryUpdated(treasury);
+        T.setTreasury(treasury);
     }
-
+    
+    // Forward fee-related functions to LibTreasury
     function validateFees(Fees memory fees) internal pure {
-        if (fees.entry > MAX_ENTRY_FEE_BPS) revert Errors.Exceeds(fees.entry, MAX_ENTRY_FEE_BPS);
-        if (fees.exit > MAX_EXIT_FEE_BPS) revert Errors.Exceeds(fees.exit, MAX_EXIT_FEE_BPS);
-        if (fees.mgmt > MAX_MGMT_FEE_BPS) revert Errors.Exceeds(fees.mgmt, MAX_MGMT_FEE_BPS);
-        if (fees.perf > MAX_PERFORMANCE_FEE_BPS) revert Errors.Exceeds(fees.perf, MAX_PERFORMANCE_FEE_BPS);
-        if (fees.flash > MAX_FLASH_FEE_BPS) revert Errors.Exceeds(fees.flash, MAX_FLASH_FEE_BPS);
+        T.validateFees(fees);
     }
 
     function setFees(uint32 vaultId, Fees memory fees) internal {
-        validateFees(fees);
-        vaultId.getVault().fees = fees;
-        emit Events.FeesUpdated(vaultId, fees.entry, fees.exit, fees.mgmt, fees.perf, fees.flash);
+        T.setFees(vaultId, fees);
     }
 
     function setFees(Fees memory fees) internal {
-        setFees(0, fees);
+        T.setFees(fees);
     }
 
     function getFees(uint32 vaultId) internal view returns (Fees memory) {
-        return vaultId == 0 ? S.core().treasury.defaultFees : vaultId.getVault().fees;
+        return T.getFees(vaultId);
     }
 
     function getFees() internal view returns (Fees memory) {
-        return getFees(0);
+        return T.getFees();
     }
 
     // vault level fees
     function getAccruedFees(uint32 vaultId, IERC20 token) internal view returns (uint256) {
-        return vaultId.getVault().accruedFees[token];
+        return T.getAccruedFees(vaultId, token);
     }
 
     function getPendingFees(uint32 vaultId, IERC20 token) internal view returns (uint256) {
-        return vaultId.getVault().pendingFees[token];
+        return T.getPendingFees(vaultId, token);
     }
 
     // protocol level fees
     function getAccruedFees(IERC20 token) external view returns (uint256) {
-        return getAccruedFees(0, token);
+        return T.getAccruedFees(token);
     }
 
     function getPendingFees(IERC20 token) external view returns (uint256) {
-        return getPendingFees(0, token);
+        return T.getPendingFees(token);
     }
 
     /*═══════════════════════════════════════════════════════════════╗

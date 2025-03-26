@@ -9,7 +9,7 @@ import {AccessControlFacet} from "@facets/AccessControlFacet.sol";
 import {LibAccessControl} from "@libraries/LibAccessControl.sol";
 import {TokenType, ErrorType} from "@/BTRTypes.sol";
 import {BTRErrors as Errors} from "@libraries/BTREvents.sol";
-import {TestToken} from "../mocks/TestToken.sol";
+import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockERC721} from "../mocks/MockERC721.sol";
 import {MockERC1155} from "../mocks/MockERC1155.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -24,7 +24,7 @@ import {LibRescue} from "@libraries/LibRescue.sol";
  */
 contract RescueTest is BaseTest {
     RescueFacet public rescueFacet;
-    TestToken public mockToken;
+    MockERC20 public mockToken;
     MockERC721 public mockNFT;
     MockERC1155 public mockERC1155;
 
@@ -46,7 +46,7 @@ contract RescueTest is BaseTest {
         rescueFacet = RescueFacet(diamond);
         
         // Deploy test tokens
-        mockToken = new TestToken("Mock Token", "MOCK", 18);
+        mockToken = new MockERC20("Mock Token", "MOCK", 18);
         mockNFT = new MockERC721("Mock NFT", "MNFT");
         mockERC1155 = new MockERC1155("https://token.uri/");
     }
@@ -283,9 +283,9 @@ contract RescueTest is BaseTest {
         initRescueModule();
         
         // Create multiple tokens
-        TestToken token1 = new TestToken("Token 1", "TK1", 18);
-        TestToken token2 = new TestToken("Token 2", "TK2", 18);
-        TestToken token3 = new TestToken("Token 3", "TK3", 18);
+        MockERC20 token1 = new MockERC20("Token 1", "TK1", 18);
+        MockERC20 token2 = new MockERC20("Token 2", "TK2", 18);
+        MockERC20 token3 = new MockERC20("Token 3", "TK3", 18);
         
         // Mint tokens to the diamond
         token1.mint(address(diamond), RESCUE_AMOUNT);

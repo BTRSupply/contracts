@@ -28,15 +28,17 @@ import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 contract BTRDiamond is IDiamond {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    constructor(address _owner, address _diamondCutFacet) payable {
+    constructor(address _owner, address _treasury, address _diamondCutFacet) payable {
         if (_owner == address(0)) revert Errors.ZeroAddress();
+        if (_treasury == address(0)) revert Errors.ZeroAddress();
         if (_diamondCutFacet == address(0))
             revert Errors.NotFound(ErrorType.FACET);
+        
         D.enforceHasContractCode(_diamondCutFacet);
         AccessControl storage acs = S.accessControl();
         acs.grantDelay = AC.DEFAULT_GRANT_DELAY;
         acs.acceptWindow = AC.DEFAULT_ACCEPT_WINDOW;
-        
+
         // Initialize admin role
         acs.roles[AC.ADMIN_ROLE].members.add(_owner);
         acs.roles[AC.ADMIN_ROLE].adminRole = AC.ADMIN_ROLE;
@@ -46,6 +48,10 @@ contract BTRDiamond is IDiamond {
         acs.roles[AC.MANAGER_ROLE].adminRole = AC.ADMIN_ROLE;
         acs.roles[AC.KEEPER_ROLE].adminRole = AC.ADMIN_ROLE;
         acs.roles[AC.TREASURY_ROLE].adminRole = AC.ADMIN_ROLE;
+        
+        // Set treasury role and address
+        acs.roles[AC.TREASURY_ROLE].members.add(_treasury);
+        S.core().treasury.treasury = _treasury;
         
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         bytes4[] memory functionSelectors = new bytes4[](1);

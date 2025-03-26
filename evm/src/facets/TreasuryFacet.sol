@@ -18,6 +18,7 @@ contract TreasuryFacet is PermissionedFacet {
     /// @dev Can only be called once by admin
     function initializeTreasury() external onlyAdmin {
         // No initialization needed for TreasuryFacet
+        // Treasury address is set in BTRDiamond constructor
     }
 
     // protocol level fees

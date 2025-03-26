@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import "@interfaces/ercs/IERC7802.sol";
 import "@interfaces/ercs/IXERC20.sol";
-import "@abstract/Permissioned.sol";
+import "./Permissioned.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
@@ -320,7 +320,7 @@ abstract contract ERC20Bridgeable is
      * @param spender The address spending the tokens
      * @param amount The amount to spend
      */
-    function _spendAllowance(address from, address spender, uint256 amount) internal {
+    function _spendAllowance(address from, address spender, uint256 amount) internal override {
         if (from == spender) return;
         
         uint256 currentAllowance = allowance(from, spender);

@@ -131,7 +131,7 @@ contract DiamondTest is BaseTest {
 
     function testDiamondConstructor() public {
         // Test valid construction
-        BTRDiamond newDiamond = new BTRDiamond(admin, address(new DiamondCutFacet()));
+        BTRDiamond newDiamond = new BTRDiamond(admin, address(0x1234), address(new DiamondCutFacet()));
         assertTrue(address(newDiamond) != address(0), "Diamond not deployed");
     }
 

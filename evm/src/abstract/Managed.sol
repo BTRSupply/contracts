@@ -16,20 +16,6 @@ abstract contract Managed is Permissioned {
 
     // ========== Account Status ==========
 
-    /// @notice Check if an account is whitelisted
-    /// @param account The account to check
-    /// @return True if the account is whitelisted
-    function isWhitelisted(address account) public view returns (bool) {
-        return management().isWhitelisted(account);
-    }
-
-    /// @notice Check if an account is blacklisted
-    /// @param account The account to check
-    /// @return True if the account is blacklisted
-    function isBlacklisted(address account) public view returns (bool) {
-        return management().isBlacklisted(account);
-    }
-
     /// @notice Get the status of an account
     /// @param account The account to check
     /// @return The account status

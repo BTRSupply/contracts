@@ -13,7 +13,7 @@ import {LibTreasury} from "@libraries/LibTreasury.sol";
 import {LibMaths} from "@libraries/LibMaths.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {ErrorType, Fees, VaultInitParams, FeeType, Range, CoreStorage, ALMVault, Rebalance} from "@/BTRTypes.sol";
-import {TestToken} from "../mocks/TestToken.sol";
+import {MockERC20} from "../mocks/MockERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
@@ -25,8 +25,8 @@ contract TreasuryTest is BaseTest {
     TreasuryFacet public treasuryFacet;
     ALMFacet public almFacet;
     ManagementFacet public managementFacet;
-    TestToken public token0;
-    TestToken public token1;
+    MockERC20 public token0;
+    MockERC20 public token1;
     address public treasuryAddress;
     address public user;
     uint32 public vaultId;
@@ -162,8 +162,8 @@ contract TreasuryTest is BaseTest {
         managementFacet = ManagementFacet(diamond);
         
         // Deploy test tokens
-        token0 = new TestToken("Token 0", "TK0", 18);
-        token1 = new TestToken("Token 1", "TK1", 18);
+        token0 = new MockERC20("Token 0", "TK0", 18);
+        token1 = new MockERC20("Token 1", "TK1", 18);
         
         // Ensure token0 has lower address than token1 (required by protocol)
         if (address(token0) > address(token1)) {
@@ -176,13 +176,9 @@ contract TreasuryTest is BaseTest {
         // Create a regular user address for permission tests
         user = address(0xABCD);
         
-        // Initialize treasury with admin role
+        // Initialize treasury - now just a no-op since treasury is set in constructor
         vm.prank(admin);
         treasuryFacet.initializeTreasury();
-        
-        // Set treasury address
-        vm.prank(admin);
-        treasuryFacet.setTreasury(treasuryAddress);
         
         // Set default fees
         vm.prank(manager);

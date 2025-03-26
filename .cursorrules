@@ -1,10 +1,30 @@
 ---
-description: Enforce structured pacing and scope control to prevent overreach.
+description: Project structure and development guidelines for the multi-chain contracts repository.
 globs:
   - "*"
 ---
 
-# Pacing and Scope Control
+# Project Structure
+
+### Multi-Chain Architecture
+- Ethereum/EVM code lives in `./evm` directory and uses `./evm/foundry.toml` for configuration
+- Solana-specific code lives in `./solana` directory
+- Sui-specific code lives in `./sui` directory
+
+### Build Tools Organization
+- Bash scripts for project-wide tooling are in `./scripts` 
+- Forge/Foundry scripts for EVM deployment are in `./evm/scripts`
+- Diamond pattern facets are in `./evm/src/facets`
+
+### Diamond Architecture (EVM)
+- Project uses Diamond pattern (EIP-2535) for contract modularity
+- Compilation happens in two steps:
+  1. First compiling all facets from `./evm/src/facets`
+  2. Then generating the diamond deployment script to register facet functions
+  3. Finally compiling everything together (generated deployer + tests)
+- This 3-steps build process is automated via `./scripts/setup.sh`
+
+# Development Guidelines
 
 ### Explicit Checkpoint Requirements
 - You must pause after completing each logical unit of work and wait for explicit approval before continuing.
@@ -21,6 +41,10 @@ globs:
 ### Scope Boundary Enforcement
 - If a task appears to require changes outside the initially identified files or components, pause and request explicit permission.
 - Never perform 'while I'm at it' improvements without prior approval.
+
+### Build Process Enforcement
+- Only use setup.sh for building the project.
+- Do not use direct forge commands for building, cleaning, or testing the project.
 
 onlygodtime: Integrated (Ø,G), [07/03/2025 14:13]
 ---

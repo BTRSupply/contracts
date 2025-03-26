@@ -11,7 +11,7 @@ import {LibManagement} from "@libraries/LibManagement.sol";
 import {LibPausable} from "@libraries/LibPausable.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {AccountStatus as AS, AddressType, ErrorType, Fees, CoreStorage, ALMVault, Registry} from "@/BTRTypes.sol";
-import {TestToken} from "../mocks/TestToken.sol";
+import {MockERC20} from "../mocks/MockERC20.sol";
 import {PausableFacet} from "@facets/abstract/PausableFacet.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {LibBitMask} from "@libraries/LibBitMask.sol";
@@ -29,7 +29,7 @@ contract ManagementTest is BaseTest {
     address public inputToken;
     address public outputToken;
     address public mockTreasury;
-    TestToken public testToken;
+    MockERC20 public mockToken;
     uint32 public vaultId;
     
     // Example vault ID for tests
@@ -90,7 +90,7 @@ contract ManagementTest is BaseTest {
         mockTreasury = address(0x4444);
         
         // Deploy test token
-        testToken = new TestToken("Test", "TST", 18);
+        mockToken = new MockERC20("Test", "TST", 18);
         
         // Initialize management with admin role
         vm.prank(admin);

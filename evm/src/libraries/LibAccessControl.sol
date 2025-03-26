@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {BTRStorage as S} from "@libraries/BTRStorage.sol";
 import {BTRErrors as Errors, BTREvents as Events} from "@libraries/BTREvents.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {AccessControl, RoleData, PendingAcceptance, ErrorType, TokenType, Rescue} from "@/BTRTypes.sol";
+import {AccessControl, RoleData, PendingAcceptance, ErrorType, TokenType, Rescue, AccountStatus} from "@/BTRTypes.sol";
 import {LibRescue} from "@libraries/LibRescue.sol";
 
 /// @title LibAccessControl
@@ -64,9 +64,16 @@ library LibAccessControl {
     /// @param account The account to check
     /// @return True if the account is blacklisted
     function isBlacklisted(address account) internal view returns (bool) {
-        return S.accessControl().blacklist.contains(account);
+        return S.restrictions().accountStatus[account] == AccountStatus.BLACKLISTED;
     }
-    
+
+    /// @notice Check if an account is whitelisted
+    /// @param account The account to check
+    /// @return True if the account is whitelisted
+    function isWhitelisted(address account) internal view returns (bool) {
+        return S.restrictions().accountStatus[account] == AccountStatus.WHITELISTED;
+    }
+
     /// @notice Check if an account has a role
     /// @param role The role to check
     /// @param account The account to check

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import "@abstract/ERC20Bridgeable.sol";
+import "./abstract/ERC20Bridgeable.sol";
 
 /**
  * @title BTR Token
@@ -60,8 +60,8 @@ contract BTR is ERC20Bridgeable {
      * @dev Gets the treasury address with validation
      * @return The validated treasury address
      */
-    function treasury() public view returns (address) {
-        address treasuryAddr = super.treasury();
+    function treasury() public view override returns (address) {
+        address treasuryAddr = permissioned().treasury();
         if (treasuryAddr == address(0)) revert NoTreasuryAddressFound();
         return treasuryAddr;
     }

@@ -115,11 +115,11 @@ contract ManagementFacet is PermissionedFacet, PausableFacet, NonReentrantFacet 
         M.removeFromListBatch(accounts);
     }
 
-    function isWhitelisted(address account) external view returns (bool) {
+    function isWhitelisted(address account) external view override returns (bool) {
         return M.isWhitelisted(account);
     }
 
-    function isBlacklisted(address account) external view returns (bool) {
+    function isBlacklisted(address account) external view override returns (bool) {
         return M.isBlacklisted(account);
     }
 

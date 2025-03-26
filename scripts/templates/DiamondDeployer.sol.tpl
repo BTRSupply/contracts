@@ -3,12 +3,10 @@ pragma solidity 0.8.28;
 
 // Core imports
 import {BTRDiamond} from "@/BTRDiamond.sol";
-import {IDiamondCut} from "@interfaces/IDiamondCut.sol";
-import {IDiamondLoupe} from "@interfaces/IDiamondLoupe.sol";
+import {IDiamondCut, IDiamondLoupe, IDiamondInit, IDiamondCutCallback} from "@interfaces/IDiamond.sol";
 import {IERC173} from "@interfaces/ercs/IERC173.sol";
 import {IERC165} from "@interfaces/ercs/IERC165.sol";
 import {ICreateX} from "@interfaces/ICreateX.sol";
-import {IDiamondCut, IDiamondInit, IDiamondCutCallback} from "@interfaces/IDiamond.sol";
 
 // Facet imports
 // FACET_IMPORTS_PLACEHOLDER
@@ -16,7 +14,51 @@ import {IDiamondCut, IDiamondInit, IDiamondCutCallback} from "@interfaces/IDiamo
 // Diamond initializer contract to avoid stack too deep errors
 contract DiamondInit {
     // This function is executed via delegatecall by the diamond when provided as an initialization address
-    // DIAMOND_INIT_FUNCTION_PLACEHOLDER
+    function init(address admin, address treasury) external {
+        // Each of these calls will delegate through the diamond to the respective facet
+        
+        // We skip AccessControl initialization because it's already done in the BTRDiamond constructor
+        // That's why our previous initialization was failing
+        // Note: Admin should already have all required roles (ADMIN_ROLE, MANAGER_ROLE, etc.)
+        
+        bool success;
+        
+        // Initialize ManagementFacet
+        bytes4 initManagement = bytes4(keccak256("initializeManagement()"));
+        (success,) = address(this).delegatecall(
+            abi.encodeWithSelector(initManagement)
+        );
+        require(success, "Management initialization failed");
+        
+        // Initialize RescueFacet
+        bytes4 initRescue = bytes4(keccak256("initializeRescue()"));
+        (success,) = address(this).delegatecall(
+            abi.encodeWithSelector(initRescue)
+        );
+        require(success, "Rescue initialization failed");
+        
+        // Initialize SwapperFacet
+        bytes4 initSwapper = bytes4(keccak256("initializeSwapper()"));
+        (success,) = address(this).delegatecall(
+            abi.encodeWithSelector(initSwapper)
+        );
+        require(success, "Swapper initialization failed");
+        
+        // Initialize ALMFacet
+        bytes4 initALM = bytes4(keccak256("initializeALM()"));
+        (success,) = address(this).delegatecall(
+            abi.encodeWithSelector(initALM)
+        );
+        require(success, "ALM initialization failed");
+        
+        // Initialize TreasuryFacet
+        bytes4 initTreasury = bytes4(keccak256("initializeTreasury()"));
+        (success,) = address(this).delegatecall(
+            abi.encodeWithSelector(initTreasury)
+        );
+        require(success, "Treasury initialization failed");
+        
+    }
 }
 
 contract DiamondDeployer {
@@ -44,8 +86,9 @@ contract DiamondDeployer {
     // SELECTOR_FUNCTIONS_PLACEHOLDER
 
     /// @notice Deploy diamond and facets using regular CREATE
-    function deployDiamond(address admin) external returns (Deployment memory) {
+    function deployDiamond(address admin, address treasury) external returns (Deployment memory) {
         require(admin != address(0), "Admin cannot be zero address");
+        require(treasury != address(0), "Treasury cannot be zero address");
         
         // Deploy all facets using helper functions to reduce local variables
         (address[] memory facets, string[] memory facetNames) = _deployFacets();
@@ -54,10 +97,10 @@ contract DiamondDeployer {
         DiamondInit diamondInit = new DiamondInit();
         
         // Deploy diamond with only the DiamondCutFacet
-        BTRDiamond diamond = new BTRDiamond(admin, facets[0]);
+        BTRDiamond diamond = new BTRDiamond(admin, treasury, facets[0]);
         
         // Add the remaining facets via the admin callback
-        _addFacetsToDiamond(admin, address(diamond), facets, address(diamondInit));
+        _addFacetsToDiamond(admin, address(diamond), facets, address(diamondInit), treasury);
         
         return Deployment({
             diamond: address(diamond),
@@ -139,7 +182,8 @@ contract DiamondDeployer {
         address admin, 
         address diamond, 
         address[] memory facets,
-        address diamondInit
+        address diamondInit,
+        address treasury
     ) internal {
         // Prepare facet cuts - all except the first one which is already in the diamond
         IDiamondCut.FacetCut[] memory cuts = _prepareFacetCuts(facets);
@@ -147,7 +191,8 @@ contract DiamondDeployer {
         // Prepare initialization calldata
         bytes memory initCalldata = abi.encodeWithSelector(
             DiamondInit.init.selector,
-            admin
+            admin,
+            treasury
         );
         
         // Have admin execute the diamondCut

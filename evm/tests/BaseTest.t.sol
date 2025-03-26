@@ -43,13 +43,13 @@ contract BaseTest is Test, IDiamondCutCallback, IERC721Receiver, IERC1155Receive
      * @dev Override this in child contracts if needed, but call super.setUp() first
      */
     function setUp() public virtual {
-        // Setup addresses
-        admin = address(this);
-        manager = address(0x1234);
-        treasury = address(0x5678);
+        // Setup addresses using environment variables or defaults
+        admin = vm.envOr("DEPLOYER", address(this));
+        manager = vm.envOr("MANAGER", address(0x1234));
+        treasury = vm.envOr("TREASURY", address(0x5678));
         
-        // Deploy diamond
-        diamond = payable(new DiamondDeployer().deployDiamond(admin).diamond);
+        // Deploy diamond with both admin and treasury addresses
+        diamond = payable(new DiamondDeployer().deployDiamond(admin, treasury).diamond);
         
         // Set up role for manager (if needed for tests)
         vm.startPrank(admin);

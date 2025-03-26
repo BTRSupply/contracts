@@ -4,6 +4,45 @@ import os
 import sys
 import glob
 
+# Define selector groups once at module level to avoid redundancy
+ACCESS_CONTROL_SELECTORS = [
+    "admin()",
+    "treasury()",
+    "getKeepers()",
+    "getManagers()",
+    "isAdmin(address)",
+    "isTreasury(address)",
+    "isKeeper(address)",
+    "isManager(address)",
+    "isBlacklisted(address)",
+    "isWhitelisted(address)",
+    "checkRole(bytes32)",
+    "checkRole(bytes32,address)",
+    "hasRole(bytes32,address)",
+    "grantRole(bytes32,address)",
+    "revokeRole(bytes32,address)",
+    "renounceRole(bytes32,address)"
+]
+
+PAUSE_SELECTORS = [
+    "isPaused()",
+    "isPaused(uint32)",
+    "pause()",
+    "pause(uint32)",
+    "unpause()",
+    "unpause(uint32)",
+    "paused()"
+]
+
+TREASURY_SELECTORS = [
+    "getTreasury()",
+    "setTreasury(address)"
+]
+
+LOUPE_SELECTORS = [
+    "supportsInterface(bytes4)"
+]
+
 def find_artifact_file(facet_name, artifacts_dir):
     """Find the artifact file for a facet"""
     # Check direct paths first (faster)
@@ -28,59 +67,20 @@ def find_artifact_file(facet_name, artifacts_dir):
 
 def get_excluded_selectors():
     """Get selectors that should be excluded from certain facets"""
-    # Access control related selectors (should only be in AccessControlFacet)
-    access_control_selectors = [
-        "isAdmin()",
-        "isKeeper()",
-        "isManager()",
-        "checkRole(bytes32)",
-        "checkRole(bytes32,address)",
-        "hasRole(bytes32,address)",
-        "grantRole(bytes32,address)",
-        "revokeRole(bytes32,address)",
-        "renounceRole(bytes32,address)"
-    ]
-    
-    # Pause related selectors (should only be in ManagementFacet)
-    pause_selectors = [
-        "pause()",
-        "unpause()",
-        "paused()"
-    ]
-    
+    # Each facet has its own excluded selectors
     return {
-        "AccessControlFacet": [],
-        "ManagementFacet": [],
-        "ALL_OTHERS": access_control_selectors + pause_selectors
+        "AccessControlFacet": [],  # No exclusions for AccessControlFacet
+        "ManagementFacet": [], # No exclusions for ManagementFacet
+        "ALL_OTHERS": ACCESS_CONTROL_SELECTORS + PAUSE_SELECTORS  # All other facets exclude these selectors
     }
 
 def get_permissioned_facet_selectors():
     """Get selectors that should only be included in specific facets"""
     return {
-        "AccessControlFacet": [
-            "hasRole(bytes32,address)",
-            "grantRole(bytes32,address)",
-            "revokeRole(bytes32,address)",
-            "renounceRole(bytes32,address)",
-            "checkRole(bytes32,address)",
-            "checkRole(bytes32)",
-            "isAdmin(address)",
-            "isKeeper(address)",
-            "isManager(address)",
-            "isTreasury(address)"
-        ],
-        "ManagementFacet": [
-            "isPaused()",
-            "isPaused(uint32)",
-            "pause()",
-            "pause(uint32)",
-            "unpause()",
-            "unpause(uint32)",
-            "paused()"
-        ],
-        "DiamondLoupeFacet": [
-            "supportsInterface(bytes4)"
-        ]
+        "AccessControlFacet": ACCESS_CONTROL_SELECTORS,
+        "ManagementFacet": PAUSE_SELECTORS,
+        "DiamondLoupeFacet": LOUPE_SELECTORS,
+        "TreasuryFacet": TREASURY_SELECTORS
     }
 
 def should_include_selector(facet_name, selector_name):
@@ -90,8 +90,10 @@ def should_include_selector(facet_name, selector_name):
     
     # Check if this is a permissioned selector that should only be in specific facets
     for facet, selectors in permissioned_selectors.items():
-        if selector_name in selectors and facet_name != facet:
-            return False
+        if selector_name in selectors:
+            # If this selector is permissioned to a specific facet,
+            # only include it in that facet
+            return facet_name == facet
     
     # Check if this selector is excluded for this facet
     if facet_name in excluded_selectors and selector_name in excluded_selectors[facet_name]:
@@ -134,7 +136,10 @@ def extract_selectors(facet_name, artifacts_dir):
 def get_initialize_method(facet_name):
     """Get the initialize method for a facet"""
     base_name = facet_name.replace("Facet", "")
-    return f"initialize{base_name}"
+    # Special case for treasury facet which takes an address parameter
+    if facet_name == "TreasuryFacet":
+        return f"initialize{base_name}(address)"
+    return f"initialize{base_name}()"
 
 def get_facet_selectors(facet_name, artifacts_dir):
     """Get selectors for a facet"""
@@ -183,7 +188,7 @@ def find_artifacts_dir(base_dir):
 def generate_diamond_init_function(facets):
     """Generate the init function for DiamondInit"""
     lines = []
-    lines.append("    function init(address admin) external {")
+    lines.append("    function init(address admin, address treasury) external {")
     lines.append("        // Each of these calls will delegate through the diamond to the respective facet")
     lines.append("        ")
     lines.append("        // We skip AccessControl initialization because it's already done in the BTRDiamond constructor")
@@ -201,15 +206,30 @@ def generate_diamond_init_function(facets):
             init_method = get_initialize_method(facet)
             
             lines.append(f"        // Initialize {facet}")
-            lines.append(f'        bytes4 init{base_name} = bytes4(keccak256("{init_method}()"));')
-            lines.append(f"        (success,) = address(this).delegatecall(")
-            lines.append(f"            abi.encodeWithSelector(init{base_name})")
-            lines.append("        );")
+            lines.append(f'        bytes4 init{base_name} = bytes4(keccak256("{init_method}"));')
+            
+            # Special case for TreasuryFacet since it takes a parameter
+            if facet == "TreasuryFacet":
+                lines.append(f"        (success,) = address(this).delegatecall(")
+                lines.append(f"            abi.encodeWithSelector(init{base_name}, treasury)")
+                lines.append("        );")
+            else:
+                lines.append(f"        (success,) = address(this).delegatecall(")
+                lines.append(f"            abi.encodeWithSelector(init{base_name})")
+                lines.append("        );")
+                
             lines.append(f'        require(success, "{base_name} initialization failed");')
             lines.append("        ")
     
     lines.append("    }")
     
+    return lines
+
+def generate_facet_imports(facets):
+    """Generate import statements for each facet"""
+    lines = []
+    for facet in facets:
+        lines.append(f'import {{{facet}}} from "@facets/{facet}.sol";')
     return lines
 
 def generate_deployer(artifacts_dir=None):
@@ -257,10 +277,8 @@ def generate_deployer(artifacts_dir=None):
         print(f"Error reading template file: {e}", file=sys.stderr)
         return False
     
-    # Replace facet imports
-    facet_imports = []
-    for facet in facets:
-        facet_imports.append(f'import {{{facet}}} from "@facets/{facet}.sol";')
+    # Generate facet imports
+    facet_imports = generate_facet_imports(facets)
     template = template.replace("// FACET_IMPORTS_PLACEHOLDER", "\n".join(facet_imports))
     
     # Generate selector functions
@@ -269,9 +287,10 @@ def generate_deployer(artifacts_dir=None):
         selector_functions.extend(generate_selector_function(facet, facet_selectors[facet]))
     template = template.replace("// SELECTOR_FUNCTIONS_PLACEHOLDER", "\n".join(selector_functions))
     
-    # Replace DiamondInit function
-    diamond_init_function = generate_diamond_init_function(facets)
-    template = template.replace("    // DIAMOND_INIT_FUNCTION_PLACEHOLDER", "\n".join(diamond_init_function))
+    # Replace DiamondInit function (only if the placeholder exists)
+    if "// DIAMOND_INIT_FUNCTION_PLACEHOLDER" in template:
+        diamond_init_function = generate_diamond_init_function(facets)
+        template = template.replace("    // DIAMOND_INIT_FUNCTION_PLACEHOLDER", "\n".join(diamond_init_function))
     
     # Write the file
     try:

@@ -50,20 +50,12 @@ echo "Restoring temporarily removed folders..."
 echo "Step 2: Generating DiamondDeployer.gen.sol using Python..."
 cd ..
 
-# Create a temporary copy of generate_deployer.py with updated output path
-cp scripts/generate_deployer.py scripts/generate_deployer_temp.py
-
-# Update the output path in the temporary script
-sed -i '' 's/output_path = os\.path\.join("evm", "utils", "DiamondDeployer\.sol")/output_path = os\.path\.join("evm", "utils", "generated", "DiamondDeployer.gen.sol")/' scripts/generate_deployer_temp.py
-
-chmod +x scripts/generate_deployer_temp.py 2>/dev/null || true
-python3 scripts/generate_deployer_temp.py || { echo "Error: Python generator failed"; exit 1; }
-
-# Remove temporary script
-rm scripts/generate_deployer_temp.py
+# Run the generator script directly with the correct artifact path
+python3 scripts/generate_deployer.py evm/out || { echo "Error: Python generator failed"; exit 1; }
 
 # Create a symbolic link to ensure backward compatibility
 cd evm/utils
+mkdir -p generated
 ln -sf generated/DiamondDeployer.gen.sol DiamondDeployer.sol
 cd ../..
 

@@ -16,14 +16,16 @@ contract DeployDiamond is Script {
         uint256 deployerPk = vm.envUint("DEPLOYER_PK");
         address deployer = vm.addr(deployerPk);
         address admin = deployer;
+        address treasury = vm.envOr("TREASURY", address(0x1234));
         
         console2.log("Deploying BTR Diamond with admin:", admin);
+        console2.log("Treasury address:", treasury);
         
         vm.startBroadcast(deployerPk);
 
         // Deploy diamond and all facets using the utility
         DiamondDeployer diamondDeployer = new DiamondDeployer();
-        DiamondDeployer.Deployment memory deployment = diamondDeployer.deployDiamond(admin);
+        DiamondDeployer.Deployment memory deployment = diamondDeployer.deployDiamond(admin, treasury);
         
         vm.stopBroadcast();
         

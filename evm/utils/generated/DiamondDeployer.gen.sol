@@ -21,7 +21,7 @@ import {TreasuryFacet} from "@facets/TreasuryFacet.sol";
 // Diamond initializer contract to avoid stack too deep errors
 contract DiamondInit {
     // This function is executed via delegatecall by the diamond when provided as an initialization address
-    function init(address admin) external {
+    function init(address admin, address treasury) external {
         // Each of these calls will delegate through the diamond to the respective facet
         
         // We skip AccessControl initialization because it's already done in the BTRDiamond constructor
@@ -113,7 +113,7 @@ contract DiamondDeployer {
 
     // Function selectors for AccessControlFacet
     function getAccessControlFacetSelectors() public pure returns (bytes4[] memory) {
-        bytes4[] memory selectors = new bytes4[](24);
+        bytes4[] memory selectors = new bytes4[](27);
         selectors[0] = bytes4(0x36fc1787); /* acceptRole(bytes32) */
         selectors[1] = bytes4(0xf851a440); /* admin() */
         selectors[2] = bytes4(0x0269df4d); /* cancelRoleGrant(address) */
@@ -129,21 +129,24 @@ contract DiamondDeployer {
         selectors[12] = bytes4(0x91d14854); /* hasRole(bytes32,address) */
         selectors[13] = bytes4(0x9fff43bb); /* initializeAccessControl(address) */
         selectors[14] = bytes4(0x24d7806c); /* isAdmin(address) */
-        selectors[15] = bytes4(0x6ba42aaa); /* isKeeper(address) */
-        selectors[16] = bytes4(0xf3ae2415); /* isManager(address) */
-        selectors[17] = bytes4(0x516f0a1b); /* isTreasury(address) */
-        selectors[18] = bytes4(0x8da5cb5b); /* owner() */
-        selectors[19] = bytes4(0x8bb9c5bf); /* renounceRole(bytes32) */
-        selectors[20] = bytes4(0xd547741f); /* revokeRole(bytes32,address) */
-        selectors[21] = bytes4(0x1e4e0091); /* setRoleAdmin(bytes32,bytes32) */
-        selectors[22] = bytes4(0x1b3e17db); /* setTimelockConfig(uint256,uint256) */
-        selectors[23] = bytes4(0xf2fde38b); /* transferOwnership(address) */
+        selectors[15] = bytes4(0xfe575a87); /* isBlacklisted(address) */
+        selectors[16] = bytes4(0x6ba42aaa); /* isKeeper(address) */
+        selectors[17] = bytes4(0xf3ae2415); /* isManager(address) */
+        selectors[18] = bytes4(0x516f0a1b); /* isTreasury(address) */
+        selectors[19] = bytes4(0x3af32abf); /* isWhitelisted(address) */
+        selectors[20] = bytes4(0x8da5cb5b); /* owner() */
+        selectors[21] = bytes4(0x8bb9c5bf); /* renounceRole(bytes32) */
+        selectors[22] = bytes4(0xd547741f); /* revokeRole(bytes32,address) */
+        selectors[23] = bytes4(0x1e4e0091); /* setRoleAdmin(bytes32,bytes32) */
+        selectors[24] = bytes4(0x1b3e17db); /* setTimelockConfig(uint256,uint256) */
+        selectors[25] = bytes4(0xf2fde38b); /* transferOwnership(address) */
+        selectors[26] = bytes4(0x61d027b3); /* treasury() */
         return selectors;
     }
 
     // Function selectors for ManagementFacet
     function getManagementFacetSelectors() public pure returns (bytes4[] memory) {
-        bytes4[] memory selectors = new bytes4[](47);
+        bytes4[] memory selectors = new bytes4[](45);
         selectors[0] = bytes4(0x44337ea1); /* addToBlacklist(address) */
         selectors[1] = bytes4(0xc7054fbe); /* addToListBatch(address[],uint8) */
         selectors[2] = bytes4(0xe43252d7); /* addToWhitelist(address) */
@@ -155,42 +158,40 @@ contract DiamondDeployer {
         selectors[8] = bytes4(0xbc141374); /* initializeManagement() */
         selectors[9] = bytes4(0x5c5218dd); /* isApproveMax() */
         selectors[10] = bytes4(0x026e2ab8); /* isAutoRevoke() */
-        selectors[11] = bytes4(0xfe575a87); /* isBlacklisted(address) */
-        selectors[12] = bytes4(0x332c2e18); /* isBridgeInputRestricted(address) */
-        selectors[13] = bytes4(0xf00791d0); /* isBridgeOutputRestricted(address) */
-        selectors[14] = bytes4(0x36ce5d54); /* isBridgeRouterRestricted(address) */
-        selectors[15] = bytes4(0xb187bd26); /* isPaused() */
-        selectors[16] = bytes4(0xeef4da34); /* isPaused(uint32) */
-        selectors[17] = bytes4(0x81f17587); /* isRestrictedMint(uint32) */
-        selectors[18] = bytes4(0x290385f1); /* isRestrictedMinter(uint32,address) */
-        selectors[19] = bytes4(0x4be461ef); /* isSwapCallerRestricted(address) */
-        selectors[20] = bytes4(0xcb3fbbfc); /* isSwapInputRestricted(address) */
-        selectors[21] = bytes4(0xc01109a3); /* isSwapOutputRestricted(address) */
-        selectors[22] = bytes4(0xeae21c4c); /* isSwapRouterRestricted(address) */
-        selectors[23] = bytes4(0x3af32abf); /* isWhitelisted(address) */
-        selectors[24] = bytes4(0x8456cb59); /* pause() */
-        selectors[25] = bytes4(0x4cda9b55); /* pause(uint32) */
-        selectors[26] = bytes4(0x257f9abf); /* removeFromList(address) */
-        selectors[27] = bytes4(0x8829c167); /* removeFromListBatch(address[]) */
-        selectors[28] = bytes4(0x0ad2b0a1); /* setAccountStatus(address,uint8) */
-        selectors[29] = bytes4(0x7b79211d); /* setAccountStatusBatch(address[],uint8) */
-        selectors[30] = bytes4(0x831b2a9a); /* setApproveMax(bool) */
-        selectors[31] = bytes4(0xd2ae6e69); /* setAutoRevoke(bool) */
-        selectors[32] = bytes4(0x54587d6c); /* setBridgeInputRestriction(bool) */
-        selectors[33] = bytes4(0x0d95136e); /* setBridgeOutputRestriction(bool) */
-        selectors[34] = bytes4(0x6cb1a756); /* setBridgeRouterRestriction(bool) */
-        selectors[35] = bytes4(0x0e7d761d); /* setMaxSupply(uint32,uint256) */
-        selectors[36] = bytes4(0x8374f11f); /* setRangeWeights(uint32,uint256[]) */
-        selectors[37] = bytes4(0xeebdd353); /* setRestrictedMint(uint32,bool) */
-        selectors[38] = bytes4(0x596012e5); /* setRestriction(uint8,bool) */
-        selectors[39] = bytes4(0xb4bea817); /* setSwapCallerRestriction(bool) */
-        selectors[40] = bytes4(0xa0da4e2c); /* setSwapInputRestriction(bool) */
-        selectors[41] = bytes4(0xc6f6d2e0); /* setSwapOutputRestriction(bool) */
-        selectors[42] = bytes4(0x4174af93); /* setSwapRouterRestriction(bool) */
-        selectors[43] = bytes4(0xf78203a7); /* setVersion(uint8) */
-        selectors[44] = bytes4(0x3f4ba83a); /* unpause() */
-        selectors[45] = bytes4(0x446a9aa2); /* unpause(uint32) */
-        selectors[46] = bytes4(0x17a4f4bb); /* zeroOutRangeWeights(uint32) */
+        selectors[11] = bytes4(0x332c2e18); /* isBridgeInputRestricted(address) */
+        selectors[12] = bytes4(0xf00791d0); /* isBridgeOutputRestricted(address) */
+        selectors[13] = bytes4(0x36ce5d54); /* isBridgeRouterRestricted(address) */
+        selectors[14] = bytes4(0xb187bd26); /* isPaused() */
+        selectors[15] = bytes4(0xeef4da34); /* isPaused(uint32) */
+        selectors[16] = bytes4(0x81f17587); /* isRestrictedMint(uint32) */
+        selectors[17] = bytes4(0x290385f1); /* isRestrictedMinter(uint32,address) */
+        selectors[18] = bytes4(0x4be461ef); /* isSwapCallerRestricted(address) */
+        selectors[19] = bytes4(0xcb3fbbfc); /* isSwapInputRestricted(address) */
+        selectors[20] = bytes4(0xc01109a3); /* isSwapOutputRestricted(address) */
+        selectors[21] = bytes4(0xeae21c4c); /* isSwapRouterRestricted(address) */
+        selectors[22] = bytes4(0x8456cb59); /* pause() */
+        selectors[23] = bytes4(0x4cda9b55); /* pause(uint32) */
+        selectors[24] = bytes4(0x257f9abf); /* removeFromList(address) */
+        selectors[25] = bytes4(0x8829c167); /* removeFromListBatch(address[]) */
+        selectors[26] = bytes4(0x0ad2b0a1); /* setAccountStatus(address,uint8) */
+        selectors[27] = bytes4(0x7b79211d); /* setAccountStatusBatch(address[],uint8) */
+        selectors[28] = bytes4(0x831b2a9a); /* setApproveMax(bool) */
+        selectors[29] = bytes4(0xd2ae6e69); /* setAutoRevoke(bool) */
+        selectors[30] = bytes4(0x54587d6c); /* setBridgeInputRestriction(bool) */
+        selectors[31] = bytes4(0x0d95136e); /* setBridgeOutputRestriction(bool) */
+        selectors[32] = bytes4(0x6cb1a756); /* setBridgeRouterRestriction(bool) */
+        selectors[33] = bytes4(0x0e7d761d); /* setMaxSupply(uint32,uint256) */
+        selectors[34] = bytes4(0x8374f11f); /* setRangeWeights(uint32,uint256[]) */
+        selectors[35] = bytes4(0xeebdd353); /* setRestrictedMint(uint32,bool) */
+        selectors[36] = bytes4(0x596012e5); /* setRestriction(uint8,bool) */
+        selectors[37] = bytes4(0xb4bea817); /* setSwapCallerRestriction(bool) */
+        selectors[38] = bytes4(0xa0da4e2c); /* setSwapInputRestriction(bool) */
+        selectors[39] = bytes4(0xc6f6d2e0); /* setSwapOutputRestriction(bool) */
+        selectors[40] = bytes4(0x4174af93); /* setSwapRouterRestriction(bool) */
+        selectors[41] = bytes4(0xf78203a7); /* setVersion(uint8) */
+        selectors[42] = bytes4(0x3f4ba83a); /* unpause() */
+        selectors[43] = bytes4(0x446a9aa2); /* unpause(uint32) */
+        selectors[44] = bytes4(0x17a4f4bb); /* zeroOutRangeWeights(uint32) */
         return selectors;
     }
 
@@ -288,8 +289,9 @@ contract DiamondDeployer {
 
 
     /// @notice Deploy diamond and facets using regular CREATE
-    function deployDiamond(address admin) external returns (Deployment memory) {
+    function deployDiamond(address admin, address treasury) external returns (Deployment memory) {
         require(admin != address(0), "Admin cannot be zero address");
+        require(treasury != address(0), "Treasury cannot be zero address");
         
         // Deploy all facets using helper functions to reduce local variables
         (address[] memory facets, string[] memory facetNames) = _deployFacets();
@@ -298,10 +300,10 @@ contract DiamondDeployer {
         DiamondInit diamondInit = new DiamondInit();
         
         // Deploy diamond with only the DiamondCutFacet
-        BTRDiamond diamond = new BTRDiamond(admin, facets[0]);
+        BTRDiamond diamond = new BTRDiamond(admin, treasury, facets[0]);
         
         // Add the remaining facets via the admin callback
-        _addFacetsToDiamond(admin, address(diamond), facets, address(diamondInit));
+        _addFacetsToDiamond(admin, address(diamond), facets, address(diamondInit), treasury);
         
         return Deployment({
             diamond: address(diamond),
@@ -383,7 +385,8 @@ contract DiamondDeployer {
         address admin, 
         address diamond, 
         address[] memory facets,
-        address diamondInit
+        address diamondInit,
+        address treasury
     ) internal {
         // Prepare facet cuts - all except the first one which is already in the diamond
         IDiamondCut.FacetCut[] memory cuts = _prepareFacetCuts(facets);
@@ -391,7 +394,8 @@ contract DiamondDeployer {
         // Prepare initialization calldata
         bytes memory initCalldata = abi.encodeWithSelector(
             DiamondInit.init.selector,
-            admin
+            admin,
+            treasury
         );
         
         // Have admin execute the diamondCut
@@ -553,4 +557,4 @@ contract DiamondDeployer {
             facets: new address[](0)
         });
     }
-}
+} 
